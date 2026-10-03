@@ -21,12 +21,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  publish:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -42,17 +48,86 @@ jobs:
             -f head_sha="$GATEWAY_SHA" -f branch=main -f status=success \
             --jq '.workflow_runs | any(.conclusion == "success")' | grep -qx true
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - name: Setup Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '22'
+          check-latest: true
           package-manager-cache: false
 
-      - name: Build service and OpenAPI
+      - name: Install publishing CLI
+        run: |
+          node - <<'NODE'
+          const [major, minor, patch] = process.versions.node.split('.').map(Number);
+          if (major !== 22 || minor < 22 || (minor === 22 && patch < 2)) {
+            throw new Error('npm 12.1.0 requires Node 22.22.2 or newer on Node 22');
+          }
+          NODE
+          npm install --global npm@12.1.0
+
+      - name: Generate OpenAPI spec
         env:
           GENERATE_OPENAPI: 'true'
         run: |
           npm ci
           npm run build
+
+      - name: Build contracts
+        working-directory: contracts/service-uploader
+        run: |
+          npm ci
+          npm run gen
+          npm run build
+
+      - name: Set deterministic contract version
+        working-directory: contracts/service-uploader
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = './package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+
+          if (pkg.name !== '@tmdjr/service-uploader-contracts') {
+            throw new Error('Unexpected contract package');
+          }
+
+          const [major, minor] = String(pkg.version).split('.');
+          const patch = process.env.GITHUB_RUN_NUMBER;
+          if (!/^\d+$/.test(patch || '')) {
+            throw new Error('Missing valid GitHub run number');
+          }
+
+          pkg.version = `${major}.${minor}.${patch}`;
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          console.log('Publishing', pkg.name, pkg.version);
+          NODE
+
+      - name: Upload OpenAPI artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: service-uploader-openapi
+          path: openapi.json
+          if-no-files-found: error
+
+      - name: Publish contracts using OIDC
+        working-directory: contracts/service-uploader
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+        run: npm publish --access public
+
+  deploy:
+    needs: publish
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - name: Prepare runtime configuration
         env:
