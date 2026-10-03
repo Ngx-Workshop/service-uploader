@@ -80,6 +80,7 @@ mode that bypasses database wiring and supplies stubs; it must be set before mod
 evaluation. See the development guide for the current generator ordering caveat.
 
 Docker uses Node 22. The existing Compose filename contains a trailing space and
-uses the external `ngx-net` network. The GitHub workflow publishes the contracts
-package and deploys the seed service on pushes to `main`; it contains seed-specific
-targets and database constraints. Review those when adopting the seed.
+uses the external `ngx-net` network. The GitHub workflow deploys the service on
+pushes to `main`. It also supports a gateway-verified manual dispatch for
+coordinated deployments. It contains seed-specific targets and database
+constraints; review those when adopting the seed.
