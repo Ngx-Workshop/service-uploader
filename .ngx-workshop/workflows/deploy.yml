@@ -1,0 +1,250 @@
+name: Deploy Ngx service-uploader
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: service-uploader-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          check-latest: true
+          package-manager-cache: false
+
+      - name: Install publishing CLI
+        run: |
+          node - <<'NODE'
+          const [major, minor, patch] = process.versions.node.split('.').map(Number);
+          if (major !== 22 || minor < 22 || (minor === 22 && patch < 2)) {
+            throw new Error('npm 12.1.0 requires Node 22.22.2 or newer on Node 22');
+          }
+          NODE
+          npm install --global npm@12.1.0
+
+      - name: Generate OpenAPI spec
+        env:
+          GENERATE_OPENAPI: 'true'
+        run: |
+          npm ci
+          npm run build
+          npm run openapi
+
+      - name: Build contracts
+        working-directory: contracts/service-uploader
+        run: |
+          npm ci
+          npm run gen
+          npm run build
+
+      - name: Set deterministic contract version
+        working-directory: contracts/service-uploader
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = './package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+
+          if (pkg.name !== '@tmdjr/service-uploader-contracts') {
+            throw new Error('Unexpected contract package');
+          }
+
+          const [major, minor] = String(pkg.version).split('.');
+          const patch = process.env.GITHUB_RUN_NUMBER;
+          if (!/^\d+$/.test(patch || '')) {
+            throw new Error('Missing valid GitHub run number');
+          }
+
+          pkg.version = `${major}.${minor}.${patch}`;
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          console.log('Publishing', pkg.name, pkg.version);
+          NODE
+
+      - name: Upload OpenAPI artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: service-uploader-openapi
+          path: openapi.json
+          if-no-files-found: error
+
+      - name: Publish contracts using OIDC
+        working-directory: contracts/service-uploader
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+        run: npm publish --access public
+
+  deploy:
+    needs: publish
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare source and private runtime configuration
+        env:
+          PORT: ${{ secrets.PORT }}
+          AUTH_BASE_URL: ${{ secrets.AUTH_BASE_URL }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          SSH_HOST_FINGERPRINT: ${{ secrets.SSH_HOST_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from urllib.parse import urlsplit, parse_qs
+
+          names = ("PORT", "AUTH_BASE_URL", "MONGODB_URI")
+          for name in (*names, "SSH_HOST_FINGERPRINT"):
+              value = os.environ.get(name, "")
+              if not value or any(c in value for c in ("\r", "\n", "\0")):
+                  raise SystemExit(f"Missing or invalid {name}")
+
+          if os.environ["PORT"] != "3003":
+              raise SystemExit("PORT must be 3003 for this deployment")
+
+          try:
+              uri = urlsplit(os.environ["MONGODB_URI"])
+              valid = (
+                  uri.scheme == "mongodb"
+                  and uri.hostname == "10.116.0.2"
+                  and uri.port == 27017
+                  and uri.username == "workshop"
+                  and bool(uri.password)
+                  and uri.path == "/workshop-viewer"
+                  and parse_qs(uri.query).get("authSource") == ["workshop-viewer"]
+              )
+          except ValueError:
+              valid = False
+
+          if not valid:
+              raise SystemExit("MONGODB_URI does not match the restored private database")
+
+          path = Path(".env.next")
+          path.write_text(
+              "".join(f"{name}={os.environ[name]}\n" for name in names)
+          )
+          path.chmod(0o600)
+          PY
+
+          git archive --format=tar --output=deploy-source.tar HEAD
+
+      - name: Copy source and runtime configuration
+        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
+        with:
+          version: '1.8.0'
+          host: ${{ secrets.DROPLET_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
+          source: 'deploy-source.tar,.env.next'
+          target: '/opt/ngx-nestjs-services/service-uploader'
+          overwrite: true
+
+      - name: Build and recreate service
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          version: '1.8.2'
+          host: ${{ secrets.DROPLET_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
+          command_timeout: 20m
+          script: |
+            set -eu
+            umask 077
+            cd /opt/ngx-nestjs-services/service-uploader
+            trap 'rm -f .env.next deploy-source.tar' EXIT
+
+            chmod 600 .env.next
+            tar -xf deploy-source.tar
+            rm -f deploy-source.tar
+            test -f .dockerignore
+
+            docker network inspect ngx-net >/dev/null 2>&1 || {
+              docker network create ngx-net ||
+                docker network inspect ngx-net >/dev/null
+            }
+
+            docker network connect ngx-net ngx-workshop-bff 2>/dev/null || true
+            docker network connect ngx-net ngx-auth-service 2>/dev/null || true
+
+            docker build -t service-uploader .
+
+            if docker container inspect service-uploader >/dev/null 2>&1; then
+              previous_image=$(docker inspect --format '{{.Image}}' service-uploader)
+              docker image tag "$previous_image" service-uploader:previous
+            fi
+            if [ -f .env ]; then
+              install -m 600 .env .env.previous
+            fi
+            install -m 600 .env.next .env
+            rm -f .env.next
+
+            if docker container inspect service-uploader >/dev/null 2>&1; then
+              docker stop service-uploader
+              docker rm service-uploader
+            fi
+
+            docker run -d \
+              --name service-uploader \
+              --env-file .env \
+              --network ngx-net \
+              --restart unless-stopped \
+              -p 3003:3003 \
+              service-uploader
+
+            attempt=0
+            until docker exec service-uploader node -e '
+              const net = require("node:net");
+              const socket = net.connect(3003, "127.0.0.1");
+              socket.setTimeout(2000);
+              socket.on("connect", () => {
+                socket.end();
+                process.exit(0);
+              });
+              socket.on("error", () => process.exit(1));
+              socket.on("timeout", () => process.exit(1));
+            ' >/dev/null 2>&1; do
+              attempt=$((attempt + 1))
+              if [ "$attempt" -ge 30 ]; then
+                echo "Service failed its startup check" >&2
+                exit 1
+              fi
+              sleep 2
+            done
+
+      - name: Remove temporary deployment files
+        if: always()
+        run: rm -f .env.next deploy-source.tar

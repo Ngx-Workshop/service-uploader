@@ -1,0 +1,158 @@
+# Managed by ngx-workshop CLI. Deployment is dispatched after gateway success.
+name: Deploy service-uploader
+
+on:
+  workflow_dispatch:
+    inputs:
+      gateway_sha:
+        description: Successfully deployed gateway commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: service-uploader-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Verify gateway deployment
+        env:
+          GH_TOKEN: ${{ secrets.GATEWAY_READ_TOKEN || github.token }}
+          GATEWAY_SHA: ${{ inputs.gateway_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$GATEWAY_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo 'Invalid gateway commit' >&2; exit 1; }
+          gh api --method GET repos/Ngx-Workshop/nginx-ngx-workshop.io/actions/workflows/deploy.yml/runs \
+            -f head_sha="$GATEWAY_SHA" -f branch=main -f status=success \
+            --jq '.workflow_runs | any(.conclusion == "success")' | grep -qx true
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Build service and OpenAPI
+        env:
+          GENERATE_OPENAPI: 'true'
+        run: |
+          npm ci
+          npm run build
+
+      - name: Prepare runtime configuration
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          AUTH_BASE_URL: ${{ secrets.AUTH_BASE_URL }}
+          SSH_HOST_FINGERPRINT: ${{ secrets.SSH_HOST_FINGERPRINT }}
+          DROPLET_IP: ${{ secrets.DROPLET_IP }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          for name in ('MONGODB_URI', 'AUTH_BASE_URL', 'SSH_HOST_FINGERPRINT', 'DROPLET_IP', 'SSH_PRIVATE_KEY'):
+              value = os.environ.get(name, '')
+              if not value:
+                  raise SystemExit(f'Missing {name}')
+          for name in ('MONGODB_URI', 'AUTH_BASE_URL', 'DROPLET_IP'):
+              if any(c in os.environ[name] for c in ('\r', '\n', '\0')):
+                  raise SystemExit(f'Invalid {name}')
+          if not os.environ['MONGODB_URI'].startswith(('mongodb://', 'mongodb+srv://')):
+              raise SystemExit('MONGODB_URI must be a MongoDB connection URI')
+          if not re.fullmatch(r'SHA256:[A-Za-z0-9+/]{43}', os.environ['SSH_HOST_FINGERPRINT']):
+              raise SystemExit('Invalid SSH_HOST_FINGERPRINT')
+          values = {'PORT': '3010', 'MONGODB_URI': os.environ['MONGODB_URI'], 'AUTH_BASE_URL': os.environ['AUTH_BASE_URL']}
+          dest = Path('.env.next')
+          dest.write_text(''.join(f'{name}={json.dumps(value)}\n' for name, value in values.items()))
+          dest.chmod(0o600)
+          PY
+          git archive --format=tar --output=deploy-source.tar HEAD
+
+      - name: Copy source and runtime configuration
+        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345
+        with:
+          version: '1.8.0'
+          host: ${{ secrets.DROPLET_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
+          source: 'deploy-source.tar,.env.next'
+          target: '/opt/ngx-nestjs-services/service-uploader'
+          overwrite: true
+
+      - name: Build, restart and verify service
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2
+        with:
+          version: '1.8.2'
+          host: ${{ secrets.DROPLET_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_HOST_FINGERPRINT }}
+          command_timeout: 20m
+          script: |
+            set -eu
+            umask 077
+            cd /opt/ngx-nestjs-services/service-uploader
+            trap 'rm -f .env.next deploy-source.tar' EXIT
+            tar -xf deploy-source.tar
+            rm -f deploy-source.tar
+            docker network inspect ngx-net >/dev/null 2>&1 || docker network create ngx-net
+            docker build -t service-uploader .
+            previous_image=''
+            if docker container inspect service-uploader >/dev/null 2>&1; then
+              previous_image=$(docker inspect --format '{{.Image}}' service-uploader)
+              docker image tag "$previous_image" service-uploader:previous
+            fi
+            had_env=false
+            if [ -f .env ]; then
+              install -m 600 .env .env.previous
+              had_env=true
+            fi
+            install -m 600 .env.next .env
+            rm -f .env.next
+            start_service() {
+              docker run -d --name service-uploader --env-file .env --network ngx-net \
+                --restart unless-stopped -p 3010:3010 "$1"
+            }
+            rollback() {
+              echo 'Deployment failed; restoring previous service if available' >&2
+              docker rm -f service-uploader >/dev/null 2>&1 || true
+              if [ "$had_env" = true ]; then install -m 600 .env.previous .env; fi
+              if [ -n "$previous_image" ]; then start_service "$previous_image"; fi
+              exit 1
+            }
+            if [ -n "$previous_image" ]; then
+              docker stop service-uploader
+              docker rm service-uploader
+            fi
+            start_service service-uploader || rollback
+            attempt=0
+            until docker exec service-uploader node -e '
+              const net = require("node:net");
+              const socket = net.connect(3010, "127.0.0.1");
+              socket.setTimeout(2000);
+              socket.on("connect", () => { socket.end(); process.exit(0); });
+              socket.on("error", () => process.exit(1));
+              socket.on("timeout", () => process.exit(1));
+            ' >/dev/null 2>&1; do
+              attempt=$((attempt + 1))
+              if [ "$attempt" -ge 30 ]; then rollback; fi
+              sleep 2
+            done
+
+      - name: Remove temporary deployment files
+        if: always()
+        run: rm -f .env.next deploy-source.tar

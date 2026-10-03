@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "kind": "service",
+  "name": "service-uploader",
+  "org": "Ngx-Workshop",
+  "seed": "seed-service-nestjs",
+  "port": 3010,
+  "apiPrefix": "uploader",
+  "contractsPackage": "@tmdjr/service-uploader-contracts"
+}
