@@ -28,7 +28,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-      id-token: write
 
     steps:
       - name: Checkout
@@ -54,6 +53,7 @@ jobs:
           node-version: '22'
           check-latest: true
           package-manager-cache: false
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install publishing CLI
         run: |
@@ -109,10 +109,11 @@ jobs:
           path: openapi.json
           if-no-files-found: error
 
-      - name: Publish contracts using OIDC
+      - name: Publish contracts
         working-directory: contracts/service-uploader
         env:
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public
 
   deploy:
