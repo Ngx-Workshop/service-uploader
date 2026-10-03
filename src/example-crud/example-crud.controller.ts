@@ -39,7 +39,7 @@ export class ExampleCrudController {
 
   @Get('hello')
   hello() {
-    return 'Dolly';
+    return 'Dolly New';
   }
 
   @Get('auth-test')
