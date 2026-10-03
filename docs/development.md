@@ -92,3 +92,12 @@ Source observations from 2026-09-29; these are not executed test results.
 
 Remove/update limitations when fixed. Update architecture and environment guidance
 whenever the corresponding implementation changes.
+
+
+## Docker deployment environment file
+
+The Actions workflow writes raw `KEY=value` lines for `docker run --env-file`.
+Do not JSON-encode or shell-quote values: Docker retains those characters in the
+container environment, invalidating the MongoDB URI and port. Newline and NUL
+validation remains in place. Local dotenv parsing and Compose have different
+quoting rules. This mechanical workflow correction changes no API contracts.

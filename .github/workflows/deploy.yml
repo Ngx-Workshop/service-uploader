@@ -1,10 +1,7 @@
-# Managed by ngx-workshop CLI. Pushes deploy directly; dispatches verify gateway success.
+# Managed by ngx-workshop CLI. Deployment is dispatched after gateway success.
 name: Deploy service-uploader
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       gateway_sha:
@@ -31,7 +28,6 @@ jobs:
           persist-credentials: false
 
       - name: Verify gateway deployment
-        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GATEWAY_READ_TOKEN || github.token }}
           GATEWAY_SHA: ${{ inputs.gateway_sha }}
@@ -65,7 +61,7 @@ jobs:
           set -euo pipefail
           umask 077
           python3 - <<'PY'
-          import json, os, re
+          import os, re
           from pathlib import Path
           for name in ('MONGODB_URI', 'AUTH_BASE_URL', 'SSH_HOST_FINGERPRINT', 'DROPLET_IP', 'SSH_PRIVATE_KEY'):
               value = os.environ.get(name, '')
@@ -80,7 +76,8 @@ jobs:
               raise SystemExit('Invalid SSH_HOST_FINGERPRINT')
           values = {'PORT': '3010', 'MONGODB_URI': os.environ['MONGODB_URI'], 'AUTH_BASE_URL': os.environ['AUTH_BASE_URL']}
           dest = Path('.env.next')
-          dest.write_text(''.join(f'{name}={json.dumps(value)}\n' for name, value in values.items()))
+          # docker run --env-file preserves quotes and backslashes literally.
+          dest.write_text(''.join(f'{name}={value}\n' for name, value in values.items()))
           dest.chmod(0o600)
           PY
           git archive --format=tar --output=deploy-source.tar HEAD
