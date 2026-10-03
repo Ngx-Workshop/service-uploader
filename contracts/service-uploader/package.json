@@ -15,9 +15,9 @@
     "access": "public"
   },
   "scripts": {
-    "clean": "rm -rf dist src/service-uploader.types.ts src/models src/core src/schemas",
+    "clean": "rm -rf dist src/service-uploader.types.ts src/generated",
     "gen:types": "openapi-typescript ../../openapi.json --output ./src/service-uploader.types.ts",
-    "gen:models": "openapi --input ../../openapi.json --output ./src --client none --exportCore false --exportServices false --exportModels true --useUnionTypes true",
+    "gen:models": "openapi --input ../../openapi.json --output ./src/generated --client none --exportCore false --exportServices false --exportModels true --useUnionTypes true",
     "gen": "npm run gen:types && npm run gen:models",
     "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "npm run clean && npm run gen && npm run build"

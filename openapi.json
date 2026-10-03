@@ -1,0 +1,531 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/uploader": {
+      "post": {
+        "operationId": "UploaderController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAssetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid asset metadata"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploader"
+        ]
+      },
+      "get": {
+        "operationId": "UploaderController_findAll",
+        "parameters": [
+          {
+            "name": "archived",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AssetDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploader"
+        ]
+      }
+    },
+    "/uploader/upload": {
+      "post": {
+        "operationId": "UploaderController_upload",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "File metadata was recorded; binary storage is still pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "File is missing, empty, too large, or metadata is invalid"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Receive a file and record it as pending durable storage",
+        "tags": [
+          "uploader"
+        ]
+      }
+    },
+    "/uploader/{id}": {
+      "get": {
+        "operationId": "UploaderController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed asset ID"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Asset not found"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploader"
+        ]
+      },
+      "patch": {
+        "operationId": "UploaderController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAssetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed ID or invalid metadata"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Asset not found"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploader"
+        ]
+      },
+      "delete": {
+        "operationId": "UploaderController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "Malformed asset ID"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Asset not found"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploader"
+        ]
+      }
+    },
+    "/uploader/{id}/archive": {
+      "patch": {
+        "operationId": "UploaderController_archive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed asset ID"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Asset not found"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploader"
+        ]
+      }
+    },
+    "/uploader/{id}/unarchive": {
+      "patch": {
+        "operationId": "UploaderController_unarchive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed asset ID"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Asset not found"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "uploader"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "NGX service-uploader API",
+    "description": "",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      },
+      "cookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "accessToken"
+      }
+    },
+    "schemas": {
+      "CreateAssetDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "tags": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "AssetDto": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "number"
+          },
+          "storageStatus": {
+            "type": "string",
+            "enum": [
+              "AWAITING_UPLOAD",
+              "PENDING_STORAGE"
+            ]
+          },
+          "originalFilename": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "number"
+          },
+          "checksumSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 digest of the received file"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "_id",
+          "name",
+          "tags",
+          "archived",
+          "version",
+          "storageStatus",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateAssetDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "tags": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

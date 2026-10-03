@@ -25,6 +25,8 @@ async function generate() {
   const config = new DocumentBuilder()
     .setTitle('NGX service-uploader API')
     .setVersion('1.0.0')
+    .addBearerAuth()
+    .addCookieAuth('accessToken')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
@@ -37,9 +39,9 @@ async function generate() {
   console.log(`✅ [openapi] Wrote ${outPath} in ${ms}ms`);
 }
 
-generate().catch((err) => {
+generate().catch((error: unknown) => {
   console.error('❌ [openapi] Failed to generate spec:');
-  console.error(err?.stack || err);
+  console.error(error instanceof Error ? error.stack : error);
   // Make CI fail loudly
   process.exit(1);
 });

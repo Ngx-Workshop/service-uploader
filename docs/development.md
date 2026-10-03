@@ -8,8 +8,8 @@ committed lockfiles. Registry access may be required for `@tmdjr/ngx-auth-client
 Install with `npm ci`. Supply a local `.env` or environment containing:
 
 ```dotenv
-MONGODB_URI=mongodb://127.0.0.1:27017/seed_service_dev
-PORT=3003
+MONGODB_URI=mongodb://127.0.0.1:27017/service_uploader_dev
+PORT=3010
 AUTH_BASE_URL=http://localhost:3000
 ```
 
@@ -66,7 +66,7 @@ from inside Docker, not the host-only localhost example above.
 - For documentation-only changes, check paths, links, accuracy, and whitespace;
   application builds are normally unnecessary.
 
-## Known inherited limitations
+## Known limitations
 
 Source observations from 2026-09-29; these are not executed test results.
 
@@ -77,18 +77,15 @@ Source observations from 2026-09-29; these are not executed test results.
   has no root controller. It imports the real application/database and does not
   mirror the runtime's global pipe/cookie setup or close the app. Do not count it
   as a working API regression suite.
-- No `src/**/*.spec.ts` tests exist in this baseline. A no-tests exit is not a pass;
-  add meaningful coverage for implementation work rather than suppressing it.
-- Only `auth-test` has a guard. The demonstration write endpoints are unguarded;
-  a production feature must define its access requirements explicitly.
+- Uploader unit tests use model doubles and do not prove live MongoDB, auth, or
+  gateway integration. Run a disposable-database HTTP suite before production.
+- Multipart intake currently buffers at most 25 MiB, records `PENDING_STORAGE`,
+  and discards the bytes. Do not treat HTTP 202 as durable storage or static-file
+  availability.
 - `UpdateExampleMongodbDocDto` is declared in both DTO files. The controller uses
   `update.dto.ts`; avoid extending the unused duplicate by accident.
-- IDs are passed directly to Mongoose; `findByIdAndUpdate` does not request
-  `runValidators`. Query values other than literal `true`/`false` leave archive
-  filtering unset. Decide and test the intended semantics when touching these areas.
-- The contracts entry point uses `@ts-ignore` for generated exports. A successful
-  compile alone is insufficient: verify generated public exports exist and match
-  consumer imports.
+- The inactive `src/example-crud` seed remains as reference code and retains its
+  inherited limitations; `AppModule` does not mount it.
 
 Remove/update limitations when fixed. Update architecture and environment guidance
 whenever the corresponding implementation changes.

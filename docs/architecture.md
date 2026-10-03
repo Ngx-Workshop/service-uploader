@@ -9,9 +9,9 @@ Nginx/gateway layer. Services own bounded data domains and share contracts throu
 published npm packages. A frontend accesses browser-relative API paths through the
 gateway; it does not connect directly to MongoDB.
 
-This service is the example CRUD producer. It owns `ExampleMongodbDoc` persistence,
-HTTP routes, validation, OpenAPI generation, and the contracts package. It does not
-own authentication accounts, user profile metadata, navigation, or shell composition.
+This service owns asset metadata, authenticated CRUD and multipart intake,
+OpenAPI generation, and the contracts package. It does not own authentication
+accounts, gateway routing, Nginx static serving, or durable binary storage yet.
 
 ## Source map and request flow
 
@@ -19,24 +19,25 @@ HTTP → controller/guards/validation → service → Mongoose model → MongoDB
 
 | Concern | Source | Current behavior |
 | --- | --- | --- |
-| Runtime | `src/main.ts` | Cookies, global whitelist/forbid-extra-fields validation, port 3003 on `0.0.0.0` |
+| Runtime | `src/main.ts` | Cookies, global whitelist/forbid-extra-fields validation, port 3010 on `0.0.0.0` |
 | Configuration/database | `src/app.module.ts` | Global ConfigModule and `MONGODB_URI`; conditional DB imports |
-| Feature wiring | `src/example-crud/example-crud.module.ts` | Mongoose model, auth client, generation-only stub providers |
-| HTTP | `src/example-crud/example-crud.controller.ts` | `/example-crud` endpoints and Swagger metadata |
-| Business operations | `src/example-crud/example-crud.service.ts` | CRUD/archive, missing-record errors, duplicate-name conflicts |
-| Input/output shapes | `src/example-crud/dto/create.dto.ts`, `update.dto.ts` | Decorated DTOs and partial update DTO |
-| Persistence | `src/example-crud/schemas/example-mongodb-doc.schema.ts` | Unique name, defaults, update version hook |
+| Feature wiring | `src/uploader/uploader.module.ts` | Asset model, auth client, generation-only stubs |
+| HTTP | `src/uploader/uploader.controller.ts` | Authenticated `/uploader` CRUD, archive, and multipart upload |
+| Business operations | `src/uploader/uploader.service.ts` | Metadata operations, checksum calculation, pending-storage lifecycle |
+| Input/output shapes | `src/uploader/dto/asset.dto.ts` | Validated create/update/upload DTOs and response shape |
+| Persistence | `src/uploader/schemas/asset.schema.ts` | Asset metadata, timestamps, version, archive and storage status |
 | OpenAPI | `src/swagger.ts`, `openapi.json` | Generated spec, without listening on a port |
 | Consumer package | `contracts/service-uploader/` | Generated types/models and package exports |
 
 ### Data behavior
 
-`name` is required and unique; `type` uses `SOME_ENUM` or `SOME_OTHER_ENUM`.
-Defaults include `version: 1`, `archived: false`, a description, and a timestamp.
-An optional address object has street/city/state/zip fields; the DTO requires all
-four nonempty strings if the object is present. Service create/update operations
-set `lastUpdated`; the schema update hook increments `version`. IDs and `__v`
-come from MongoDB/Mongoose. Archive/unarchive reuse update logic.
+`name` is required. Optional caller metadata includes `description`, up to 50
+tags, and archive state. Metadata-only records start as `AWAITING_UPLOAD`.
+Multipart intake records the original filename, caller-supplied media type, byte
+size, receipt time, and SHA-256 checksum as `PENDING_STORAGE`. Those client fields
+are metadata, not trusted storage paths or content verification. The 25 MiB
+in-memory buffer is discarded after the record is saved. Updates increment
+`version`; Mongoose timestamps maintain `createdAt` and `updatedAt`.
 
 ### Native HTTP routes
 
@@ -44,37 +45,33 @@ There is no `/api` prefix in `src/main.ts`; the gateway owns the browser prefix.
 
 | Method | Path | Current access | Result |
 | --- | --- | --- | --- |
-| GET | `/example-crud/auth-test` | `RemoteAuthGuard` | Authentication message |
-| GET | `/example-crud` | No explicit guard | List; optional `archived=true` or `false` |
-| GET | `/example-crud/:id` | No explicit guard | Document or 404 |
-| GET | `/example-crud/name/:name` | No explicit guard | Document or 404 |
-| POST | `/example-crud` | No explicit guard | Created document, 201; duplicate name 409 |
-| PATCH | `/example-crud/:id` | No explicit guard | Updated document; missing 404, duplicate name 409 |
-| DELETE | `/example-crud/:id` | No explicit guard | 204; missing 404 |
-| PATCH | `/example-crud/:id/archive` | No explicit guard | Updated document |
-| PATCH | `/example-crud/:id/unarchive` | No explicit guard | Updated document |
-
-This access table is an observation, not the intended access policy for new
-products. Invalid ID behavior and query coercion need explicit requirements/tests
-when changed; malformed IDs are not currently validated with a dedicated pipe.
+| GET | `/uploader` | `RemoteAuthGuard` | List, optionally filtered by strict boolean `archived` |
+| GET | `/uploader/:id` | `RemoteAuthGuard` | Asset or 404; malformed ID is 400 |
+| POST | `/uploader` | `RemoteAuthGuard` | Create metadata as `AWAITING_UPLOAD`, 201 |
+| POST | `/uploader/upload` | `RemoteAuthGuard` | Receive multipart file, record `PENDING_STORAGE`, 202 |
+| PATCH | `/uploader/:id` | `RemoteAuthGuard` | Update mutable caller metadata |
+| DELETE | `/uploader/:id` | `RemoteAuthGuard` | Delete metadata, 204 |
+| PATCH | `/uploader/:id/archive` | `RemoteAuthGuard` | Archive metadata |
+| PATCH | `/uploader/:id/unarchive` | `RemoteAuthGuard` | Unarchive metadata |
 
 ## External owners and contracts
 
 | External owner | Boundary | Isolated-repository approach |
 | --- | --- | --- |
-| `seed-mfe-remote` and other consumers | `@tmdjr/service-uploader-contracts`, DTOs and native API behavior | Generate/build locally; hand off the required consumer version and migration |
+| Frontend consumers | `@tmdjr/service-uploader-contracts`, DTOs and native API behavior | Generate/build locally; publish/version separately and hand off consumer migration |
 | `service-auth` | `@tmdjr/ngx-auth-client` module/guard, `AUTH_BASE_URL` configuration | Inspect installed package behavior; mock auth in unit tests |
-| `service-bff-ngx-workshop` / `nginx-ngx-workshop.io` | Routes browser `/api/example-crud` to native `/example-crud` | Record desired mapping; do not assume a locally running gateway |
+| `service-bff-ngx-workshop` / `nginx-ngx-workshop.io` | Routes browser `/api/uploader` to native `/uploader`; later serves durable static assets | Record desired mapping; do not assume a locally running gateway |
 | MongoDB infrastructure | `MONGODB_URI` supplied at runtime | Use a disposable/local database for integration checks |
+| Storage infrastructure (TBD) | Durable bytes and transfer between service and static host | `PENDING_STORAGE` is not a successful durable upload; select and implement this boundary next |
 
 Names above identify repositories, not filesystem prerequisites. The local
-contracts manifest says `0.0.1`; the frontend seed currently requests published
-`0.0.7`. Release versions must be verified independently rather than inferred from
-this checkout. Generated types describe shapes, not successful runtime integration.
+contracts manifest says `0.0.1`; release versions must be verified independently
+rather than inferred from this checkout. Generated types describe shapes, not
+successful runtime integration.
 
 ## Runtime and release boundaries
 
-`MONGODB_URI` is needed for normal runtime; `PORT` defaults to 3003. Auth configuration
+`MONGODB_URI` is needed for normal runtime; `PORT` defaults to 3010. Auth configuration
 is consumed through the external auth client. `GENERATE_OPENAPI=true` is a build
 mode that bypasses database wiring and supplies stubs; it must be set before module
 evaluation. See the development guide for the current generator ordering caveat.

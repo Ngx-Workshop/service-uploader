@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ExampleMongodbDocModule } from './example-crud/example-crud.module';
+import { UploaderModule } from './uploader/uploader.module';
 
 const DB_IMPORTS =
   process.env.GENERATE_OPENAPI === 'true'
@@ -9,7 +9,7 @@ const DB_IMPORTS =
     : [
         MongooseModule.forRootAsync({
           inject: [ConfigService],
-          useFactory: async (config: ConfigService) => ({
+          useFactory: (config: ConfigService) => ({
             uri: config.get<string>('MONGODB_URI'),
             serverSelectionTimeoutMS: 5000, // Timeout in 5 seconds
           }),
@@ -22,7 +22,7 @@ const DB_IMPORTS =
       isGlobal: true,
     }),
     ...DB_IMPORTS,
-    ExampleMongodbDocModule,
+    UploaderModule,
   ],
   controllers: [],
   providers: [],

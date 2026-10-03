@@ -10,7 +10,7 @@ below with relative links. A feature folder contains `spec.md`, `plan.md`,
 
 | Feature | Status | Spec | Plan | Tasks | Handoff |
 | --- | --- | --- | --- | --- | --- |
-| No feature records yet | — | — | — | — | — | — |
+| 001 Asset uploader API | Implemented; storage integration pending | [Spec](001-asset-uploader/spec.md) | [Plan](001-asset-uploader/plan.md) | [Tasks](001-asset-uploader/tasks.md) | [Handoff](001-asset-uploader/handoff.md) | — |
 
 Keep one row per feature, retain completed records for rationale, and update
 status when work changes. Select work from the user's request and this index;
