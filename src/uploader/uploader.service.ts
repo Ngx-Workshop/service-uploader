@@ -20,19 +20,32 @@ import {
   AssetStorageStatus,
 } from './schemas/asset.schema';
 
-export const HTML_VIDEO_MEDIA_TYPES = [
-  'video/mp4',
-  'video/webm',
-  'video/ogg',
-] as const;
-
-const HTML_VIDEO_MEDIA_TYPE_SET = new Set<string>(HTML_VIDEO_MEDIA_TYPES);
+export const BROWSER_ASSET_MEDIA_TYPE_PATTERN =
+  /^(?:image\/[a-z0-9][a-z0-9.+-]*|video\/[a-z0-9][a-z0-9.+-]*|application\/pdf)$/i;
+export const BROWSER_ASSET_MEDIA_TYPE_DESCRIPTION =
+  'image/*, video/*, or application/pdf';
+const MOJIBAKE_UTF8_SEQUENCE =
+  /(?:\u00c2[\u0080-\u00bf]|\u00c3[\u0080-\u00bf]|\u00e2[\u0080-\u00bf]{2})/;
 
 export interface ReceivedAssetFile {
   buffer: Buffer;
   mimetype: string;
   originalname: string;
   size: number;
+}
+
+export function normalizeUploadedFilename(filename: string): string {
+  const basename = filename.replaceAll('\\', '/').split('/').pop() ?? '';
+  const decoded = MOJIBAKE_UTF8_SEQUENCE.test(basename)
+    ? Buffer.from(basename, 'latin1').toString('utf8')
+    : basename;
+  const normalized = decoded.includes('\ufffd') ? basename : decoded;
+
+  return normalized
+    .normalize('NFKC')
+    .replace(/\p{Cc}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 @Injectable()
@@ -59,26 +72,27 @@ export class UploaderService {
     if (file.size === 0 || file.buffer.length === 0) {
       throw new BadRequestException('Uploaded file must not be empty');
     }
-    if (!HTML_VIDEO_MEDIA_TYPE_SET.has(file.mimetype)) {
+    if (!BROWSER_ASSET_MEDIA_TYPE_PATTERN.test(file.mimetype)) {
       throw new BadRequestException(
-        `Uploaded file must use one of: ${HTML_VIDEO_MEDIA_TYPES.join(', ')}`
+        `Uploaded file must use ${BROWSER_ASSET_MEDIA_TYPE_DESCRIPTION}`
       );
     }
-    if (!file.originalname || file.originalname.length > 255) {
+    const normalizedFilename = normalizeUploadedFilename(file.originalname);
+    if (!normalizedFilename || normalizedFilename.length > 255) {
       throw new BadRequestException(
         'Uploaded file must have a filename no longer than 255 characters'
       );
     }
 
     const extension =
-      /\.[a-zA-Z0-9]{1,10}$/.exec(file.originalname)?.[0].toLowerCase() ?? '';
+      /\.[a-zA-Z0-9]{1,10}$/.exec(normalizedFilename)?.[0].toLowerCase() ?? '';
     const storageKey = `uploads/${randomUUID()}${extension}`;
     const asset = new this.assetModel({
       storageKey,
       storageUrl: this.storage.objectUrl(storageKey),
-      name: uploadAssetDto.name ?? file.originalname.slice(0, 120),
+      name: uploadAssetDto.name ?? normalizedFilename.slice(0, 120),
       description: uploadAssetDto.description,
-      originalFilename: file.originalname,
+      originalFilename: normalizedFilename,
       mediaType: file.mimetype,
       sizeBytes: file.size,
       checksumSha256: createHash('sha256').update(file.buffer).digest('hex'),

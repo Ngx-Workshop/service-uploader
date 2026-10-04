@@ -18,6 +18,9 @@ export type AssetDto = {
      * Spaces origin URL; read access depends on object permissions
      */
     storageUrl?: string;
+    /**
+     * Sanitized and normalized original upload filename
+     */
     originalFilename?: string;
     mediaType?: string;
     sizeBytes?: number;

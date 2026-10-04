@@ -26,7 +26,8 @@ Contracts: @tmdjr/service-uploader-contracts; directory: contracts/service-uploa
 The gateway snippet below strips /api and preserves /uploader. Replace the example host with your actual private service host.
 MongoDB and auth are external prerequisites. Compose requires the external ngx-net network.
 All uploader endpoints require `RemoteAuthGuard`. `POST /uploader/upload` accepts
-one MP4, WebM, or Ogg multipart `file` up to 25 MiB, stores it in DigitalOcean Spaces, then returns
+one browser image or video (`image/*` or `video/*`) or PDF (`application/pdf`)
+multipart `file` up to 25 MiB, stores it in DigitalOcean Spaces, then returns
 HTTP 201 with `READY`, `storageKey`, and `storageUrl`. Configure
 `SPACES_ACCESS_KEY_ID` and `SPACES_SECRET_ACCESS_KEY` in the runtime environment.
 Defaults: bucket `ngx-workshop-assets`, endpoint

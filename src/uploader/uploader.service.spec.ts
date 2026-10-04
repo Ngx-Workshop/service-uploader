@@ -3,7 +3,11 @@ import { createHash } from 'node:crypto';
 import { Model } from 'mongoose';
 import { Asset, AssetStorageStatus } from './schemas/asset.schema';
 import { SpacesStorageService } from './spaces-storage.service';
-import { ReceivedAssetFile, UploaderService } from './uploader.service';
+import {
+  normalizeUploadedFilename,
+  ReceivedAssetFile,
+  UploaderService,
+} from './uploader.service';
 
 class FakeAssetModel {
   static save = jest.fn();
@@ -56,6 +60,12 @@ describe('UploaderService', () => {
     );
   });
 
+  it('sanitizes paths and normalizes UTF-8 mojibake in uploaded filenames', () => {
+    expect(
+      normalizeUploadedFilename('../Screen 2026-10-03 at 11.01.50â¯PM.png')
+    ).toBe('Screen 2026-10-03 at 11.01.50 PM.png');
+  });
+
   it('creates metadata in the awaiting-upload state', async () => {
     const result = await service.create({ name: 'Workshop logo' });
 
@@ -98,6 +108,22 @@ describe('UploaderService', () => {
       AssetStorageStatus.PENDING_STORAGE,
       AssetStorageStatus.READY,
     ]);
+  });
+
+  it('uses the normalized filename for persisted metadata and the default name', async () => {
+    const result = await service.receiveUpload(
+      {
+        ...file,
+        originalname: '../Screen 2026-10-03 at 11.01.50â¯PM.mp4',
+      },
+      {}
+    );
+
+    expect(result).toMatchObject({
+      name: 'Screen 2026-10-03 at 11.01.50 PM.mp4',
+      originalFilename: 'Screen 2026-10-03 at 11.01.50 PM.mp4',
+    });
+    expect(result.storageKey).toMatch(/^uploads\/[0-9a-f-]+\.mp4$/);
   });
 
   it('records failed storage and returns a generic 503', async () => {
@@ -152,13 +178,33 @@ describe('UploaderService', () => {
     expect(storage.put).not.toHaveBeenCalled();
   });
 
-  it.each(['image/png', 'video/avi', 'application/octet-stream'])(
+  it.each([
+    ['video/mp4', 'workshop.mp4'],
+    ['image/png', 'Screen 2026-10-03 at 11.01.50 PM.png'],
+    ['image/svg+xml', 'workshop-logo.svg'],
+    ['application/pdf', 'workshop-agenda.pdf'],
+  ])('accepts browser asset media type %s', async (mimetype, originalname) => {
+    await expect(
+      service.receiveUpload({ ...file, mimetype, originalname }, {})
+    ).resolves.toMatchObject({
+      mediaType: mimetype,
+      originalFilename: originalname,
+    });
+
+    expect(storage.put).toHaveBeenCalledWith(
+      expect.stringMatching(/^uploads\/[0-9a-f-]+\.[a-z0-9]+$/),
+      file.buffer,
+      mimetype
+    );
+  });
+
+  it.each(['audio/mpeg', 'application/zip', 'text/plain'])(
     'rejects unsupported file media type %s before persisting or transferring',
     async (mimetype) => {
       await expect(
         service.receiveUpload({ ...file, mimetype }, {})
       ).rejects.toThrow(
-        'Uploaded file must use one of: video/mp4, video/webm, video/ogg'
+        'Uploaded file must use image/*, video/*, or application/pdf'
       );
 
       expect(FakeAssetModel.constructorCalls).toBe(0);

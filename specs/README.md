@@ -12,7 +12,9 @@ below with relative links. A feature folder contains `spec.md`, `plan.md`,
 | --- | --- | --- | --- | --- | --- |
 | 001 Asset uploader API | Superseded storage boundary by 002 | [Spec](001-asset-uploader/spec.md) | [Plan](001-asset-uploader/plan.md) | [Tasks](001-asset-uploader/tasks.md) | [Handoff](001-asset-uploader/handoff.md) |
 | 002 Spaces storage | Implemented; live integration pending | [Spec](002-spaces-storage/spec.md) | [Plan](002-spaces-storage/plan.md) | [Tasks](002-spaces-storage/tasks.md) | [Handoff](002-spaces-storage/handoff.md) |
-| 003 HTML video upload validation | Implemented; integration pending | [Spec](003-html-video-upload-validation/spec.md) | [Plan](003-html-video-upload-validation/plan.md) | [Tasks](003-html-video-upload-validation/tasks.md) | [Handoff](003-html-video-upload-validation/handoff.md) |
+| 003 HTML video upload validation | Superseded by 005 | [Spec](003-html-video-upload-validation/spec.md) | [Plan](003-html-video-upload-validation/plan.md) | [Tasks](003-html-video-upload-validation/tasks.md) | [Handoff](003-html-video-upload-validation/handoff.md) |
+| 004 Upload filename normalization | Implemented; integration pending | [Spec](004-upload-filename-normalization/spec.md) | [Plan](004-upload-filename-normalization/plan.md) | [Tasks](004-upload-filename-normalization/tasks.md) | [Handoff](004-upload-filename-normalization/handoff.md) |
+| 005 Browser asset upload formats | Implemented; integration pending | [Spec](005-browser-asset-upload-formats/spec.md) | [Plan](005-browser-asset-upload-formats/plan.md) | [Tasks](005-browser-asset-upload-formats/tasks.md) | [Handoff](005-browser-asset-upload-formats/handoff.md) |
 
 Keep one row per feature, retain completed records for rationale, and update
 status when work changes. Select work from the user's request and this index;

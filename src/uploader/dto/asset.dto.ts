@@ -87,7 +87,9 @@ export class AssetDto {
   })
   storageUrl?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Sanitized and normalized original upload filename',
+  })
   originalFilename?: string;
 
   @ApiPropertyOptional()

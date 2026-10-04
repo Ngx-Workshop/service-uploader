@@ -49,9 +49,14 @@ Publishing is a separate release action. The publish script invokes
 Generated files must not replace DTO/controller source as the source of truth.
 Do not claim a version is published merely because local generation succeeded.
 
-`POST /uploader/upload` accepts only HTML video formats `video/mp4`,
-`video/webm`, and `video/ogg`. The HTTP file validator checks detected file
-signatures; direct service callers receive the same MIME allowlist validation.
+`POST /uploader/upload` accepts browser image/video MIME families (`image/*` and
+`video/*`) plus PDFs (`application/pdf`). The HTTP file validator checks detected
+file signatures and falls back to the declared MIME type for formats without
+binary signatures; direct service callers receive the same MIME allowlist
+validation.
+Uploaded filenames are reduced to a basename, Unicode-normalized, stripped of
+control characters, and have whitespace collapsed before they are persisted or
+used as the default display name.
 
 ## Docker
 

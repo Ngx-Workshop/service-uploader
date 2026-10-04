@@ -108,6 +108,7 @@ export interface components {
             storageKey?: string;
             /** @description Spaces origin URL; read access depends on object permissions */
             storageUrl?: string;
+            /** @description Sanitized and normalized original upload filename */
             originalFilename?: string;
             mediaType?: string;
             sizeBytes?: number;
@@ -212,7 +213,7 @@ export interface operations {
                 "multipart/form-data": {
                     /**
                      * Format: binary
-                     * @description HTML video file (video/mp4, video/webm, video/ogg)
+                     * @description Browser image or video, or PDF (image/*, video/*, or application/pdf)
                      */
                     file: string;
                     name?: string;
@@ -230,7 +231,7 @@ export interface operations {
                     "application/json": components["schemas"]["AssetDto"];
                 };
             };
-            /** @description File is missing, empty, too large, not an MP4, WebM, or Ogg video, or metadata is invalid */
+            /** @description File is missing, empty, too large, not a browser image/video or PDF, or metadata is invalid */
             400: {
                 headers: {
                     [name: string]: unknown;
