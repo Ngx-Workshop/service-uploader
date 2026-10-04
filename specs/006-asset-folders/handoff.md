@@ -1,6 +1,23 @@
 # Handoff: Asset folders
 
-Status: Implemented; deployment integration pending
+Status: Deployed 2026-10-04; consumer adoption and remaining live checks pending
+
+## Deployment update — 2026-10-04
+
+The original local handoff below is retained as historical evidence. The service
+is now deployed successfully, contracts `0.0.11` were published, and MongoDB
+8.0.17 now runs authenticated replica set `rs0`. Three user-approved dummy
+duplicate records were backed up and removed, and the unique checksum index was
+created. Real transactions, deployed service folder operations, live Spaces
+upload/download with SHA-256 verification, and cross-folder duplicate rejection
+passed, as did MongoDB/uploader restart and unauthenticated gateway rejection.
+
+See [deployment recovery](../../docs/deployment-2026-10-04.md) for backup locations,
+configuration decisions, exact verification scope, and remaining work. A
+user-assisted authenticated browser upload also passed, including independent
+download/hash verification after restart; the user confirmed browser duplicate
+rejection too. Consumer folder/move/409 adoption remains
+external work; publication is no longer pending.
 Spec: [spec.md](spec.md) | Plan: [plan.md](plan.md) | Tasks: [tasks.md](tasks.md)
 
 Updated: 2026-10-04
