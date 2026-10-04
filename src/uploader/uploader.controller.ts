@@ -17,7 +17,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  ApiAcceptedResponse,
+  ApiServiceUnavailableResponse,
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
@@ -61,14 +61,14 @@ export class UploaderController {
   }
 
   @Post('upload')
-  @HttpCode(HttpStatus.ACCEPTED)
+  @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: MAX_ASSET_FILE_SIZE_BYTES, files: 1 },
     })
   )
   @ApiOperation({
-    summary: 'Receive a file and record it as pending durable storage',
+    summary: 'Persist a file in Spaces and record its asset metadata',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -82,12 +82,15 @@ export class UploaderController {
       },
     },
   })
-  @ApiAcceptedResponse({
+  @ApiCreatedResponse({
     type: AssetDto,
-    description: 'File metadata was recorded; binary storage is still pending',
+    description: 'File persisted in Spaces and asset metadata saved as READY',
   })
   @ApiBadRequestResponse({
     description: 'File is missing, empty, too large, or metadata is invalid',
+  })
+  @ApiServiceUnavailableResponse({
+    description: 'Spaces upload failed; caller must upload the file again',
   })
   upload(
     @UploadedFile(

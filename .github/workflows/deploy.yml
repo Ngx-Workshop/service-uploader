@@ -132,6 +132,8 @@ jobs:
 
       - name: Prepare runtime configuration
         env:
+          SPACES_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          SPACES_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           AUTH_BASE_URL: ${{ secrets.AUTH_BASE_URL }}
           SSH_HOST_FINGERPRINT: ${{ secrets.SSH_HOST_FINGERPRINT }}
@@ -143,11 +145,11 @@ jobs:
           python3 - <<'PY'
           import os, re
           from pathlib import Path
-          for name in ('MONGODB_URI', 'AUTH_BASE_URL', 'SSH_HOST_FINGERPRINT', 'DROPLET_IP', 'SSH_PRIVATE_KEY'):
+          for name in ('SPACES_ACCESS_KEY_ID', 'SPACES_SECRET_ACCESS_KEY', 'MONGODB_URI', 'AUTH_BASE_URL', 'SSH_HOST_FINGERPRINT', 'DROPLET_IP', 'SSH_PRIVATE_KEY'):
               value = os.environ.get(name, '')
               if not value:
                   raise SystemExit(f'Missing {name}')
-          for name in ('MONGODB_URI', 'AUTH_BASE_URL', 'DROPLET_IP'):
+          for name in ('SPACES_ACCESS_KEY_ID', 'SPACES_SECRET_ACCESS_KEY', 'MONGODB_URI', 'AUTH_BASE_URL', 'DROPLET_IP'):
               if any(c in os.environ[name] for c in ('\r', '\n', '\0')):
                   raise SystemExit(f'Invalid {name}')
           if not os.environ['MONGODB_URI'].startswith(('mongodb://', 'mongodb+srv://')):
@@ -155,6 +157,8 @@ jobs:
           if not re.fullmatch(r'SHA256:[A-Za-z0-9+/]{43}', os.environ['SSH_HOST_FINGERPRINT']):
               raise SystemExit('Invalid SSH_HOST_FINGERPRINT')
           values = {'PORT': '3010', 'MONGODB_URI': os.environ['MONGODB_URI'], 'AUTH_BASE_URL': os.environ['AUTH_BASE_URL']}
+          values.update({name: os.environ[name] for name in ('SPACES_ACCESS_KEY_ID', 'SPACES_SECRET_ACCESS_KEY')})
+          values.update({'SPACES_BUCKET': 'ngx-workshop-assets', 'SPACES_ENDPOINT': 'https://sfo3.digitaloceanspaces.com', 'SPACES_OBJECT_ACL': 'public-read'})
           dest = Path('.env.next')
           # docker run --env-file preserves quotes and backslashes literally.
           dest.write_text(''.join(f'{name}={value}\n' for name, value in values.items()))

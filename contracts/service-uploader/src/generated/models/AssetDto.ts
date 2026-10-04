@@ -9,7 +9,15 @@ export type AssetDto = {
     tags: Array<string>;
     archived: boolean;
     version: number;
-    storageStatus: 'AWAITING_UPLOAD' | 'PENDING_STORAGE';
+    storageStatus: 'AWAITING_UPLOAD' | 'PENDING_STORAGE' | 'READY' | 'STORAGE_FAILED';
+    /**
+     * Server-generated Spaces object key
+     */
+    storageKey?: string;
+    /**
+     * Spaces origin URL; read access depends on object permissions
+     */
+    storageUrl?: string;
     originalFilename?: string;
     mediaType?: string;
     sizeBytes?: number;

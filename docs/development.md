@@ -11,6 +11,11 @@ Install with `npm ci`. Supply a local `.env` or environment containing:
 MONGODB_URI=mongodb://127.0.0.1:27017/service_uploader_dev
 PORT=3010
 AUTH_BASE_URL=http://localhost:3000
+SPACES_ACCESS_KEY_ID=your-spaces-key
+SPACES_SECRET_ACCESS_KEY=your-spaces-secret
+SPACES_BUCKET=ngx-workshop-assets
+SPACES_ENDPOINT=https://sfo3.digitaloceanspaces.com
+SPACES_OBJECT_ACL=public-read
 ```
 
 The URI is an example for a disposable local database. The auth URL is a
@@ -24,7 +29,7 @@ routes. Never set `GENERATE_OPENAPI=true` when running the real API.
 | Build and OpenAPI | `GENERATE_OPENAPI=true npm run build` | `postbuild` generates `openapi.json`; explicit flag avoids import-order issue |
 | Regenerate OpenAPI | `GENERATE_OPENAPI=true npm run openapi` | Uses existing compiled output; build first after source changes |
 | Production runtime | `npm run start:prod` | Runs compiled code with runtime environment |
-| Unit tests | `npm test -- --runInBand` | No source unit specs currently present |
+| Unit tests | `npm test -- --runInBand` | Focused uploader/model/storage doubles |
 | End-to-end tests | `npm run test:e2e -- --runInBand` | Existing test is stale; see below |
 | Lint | `npm run lint` | Uses `--fix` and can modify files; inspect resulting changes |
 
@@ -46,9 +51,8 @@ Do not claim a version is published merely because local generation succeeded.
 
 ## Docker
 
-The tracked Compose file is named `docker-compose.yml `, with a trailing space.
-Use `docker compose -f 'docker-compose.yml ' up --build` until that filename is
-deliberately corrected. The file expects `.env` and an existing `ngx-net` network;
+Use `docker compose -f docker-compose.yml up --build`. The file expects `.env`
+and an existing `ngx-net` network;
 it does not start MongoDB or auth. Container connections need addresses reachable
 from inside Docker, not the host-only localhost example above.
 
@@ -79,9 +83,15 @@ Source observations from 2026-09-29; these are not executed test results.
   as a working API regression suite.
 - Uploader unit tests use model doubles and do not prove live MongoDB, auth, or
   gateway integration. Run a disposable-database HTTP suite before production.
-- Multipart intake currently buffers at most 25 MiB, records `PENDING_STORAGE`,
-  and discards the bytes. Do not treat HTTP 202 as durable storage or static-file
-  availability.
+- Multipart intake buffers at most 25 MiB per request and uploads synchronously.
+  Concurrent uploads multiply memory usage. Storage failures return 503; there is
+  no durable retry queue. Pending/failed records require inspection and reupload
+  or reconciliation; do not treat them as ready assets.
+- Public read is the default for this static-asset bucket. To restrict downloads,
+  set `SPACES_OBJECT_ACL=private`; signed downloads are not implemented here.
+  DELETE and archive affect metadata only, not object bytes or permissions.
+- Ensure the gateway request body limit allows 25 MiB plus multipart overhead.
+  Live Spaces/MongoDB/auth/gateway checks remain deployment verification.
 - `UpdateExampleMongodbDocDto` is declared in both DTO files. The controller uses
   `update.dto.ts`; avoid extending the unused duplicate by accident.
 - The inactive `src/example-crud` seed remains as reference code and retains its
@@ -98,3 +108,18 @@ Do not JSON-encode or shell-quote values: Docker retains those characters in the
 container environment, invalidating the MongoDB URI and port. Newline and NUL
 validation remains in place. Local dotenv parsing and Compose have different
 quoting rules. This mechanical workflow correction changes no API contracts.
+
+## Spaces deployment
+
+The Actions workflow requires organization secrets `SPACES_ACCESS_KEY_ID` and
+`SPACES_SECRET_ACCESS_KEY`, accessible to this repository. It validates nonempty,
+single-line values and supplies them to the container in the protected runtime
+file, never the Docker build. Local runtime needs the same keys; OpenAPI generation
+uses an inert storage provider and requires none. Endpoint/bucket/ACL settings
+have defaults shown above; deployment writes them explicitly.
+
+After deployment, upload through `/api/uploader/upload` with authentication, check
+201/READY and download `storageUrl`; compare SHA-256 with `checksumSha256`. Restart
+the service and confirm the object still downloads. If private ACL is selected,
+verify via authenticated S3 tooling instead. Organization secrets are not readable
+in this local checkout, so local tests use doubles.

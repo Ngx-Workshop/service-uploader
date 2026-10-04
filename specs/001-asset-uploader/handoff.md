@@ -50,3 +50,9 @@ container/server and the Nginx static-file server, then define transitions out o
 The feature index, architecture, development guide, README, and integration
 checklist now describe the implemented API and pending storage boundary. The
 constitution did not require amendment.
+
+## Storage follow-up
+
+The pending-only behavior above is the historical baseline.
+[002 Spaces storage](../002-spaces-storage/handoff.md) supersedes the storage
+boundary with synchronous Spaces persistence and HTTP 201/READY.

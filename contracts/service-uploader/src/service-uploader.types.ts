@@ -29,7 +29,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Receive a file and record it as pending durable storage */
+        /** Persist a file in Spaces and record its asset metadata */
         post: operations["UploaderController_upload"];
         delete?: never;
         options?: never;
@@ -103,7 +103,11 @@ export interface components {
             archived: boolean;
             version: number;
             /** @enum {string} */
-            storageStatus: "AWAITING_UPLOAD" | "PENDING_STORAGE";
+            storageStatus: "AWAITING_UPLOAD" | "PENDING_STORAGE" | "READY" | "STORAGE_FAILED";
+            /** @description Server-generated Spaces object key */
+            storageKey?: string;
+            /** @description Spaces origin URL; read access depends on object permissions */
+            storageUrl?: string;
             originalFilename?: string;
             mediaType?: string;
             sizeBytes?: number;
@@ -214,8 +218,8 @@ export interface operations {
             };
         };
         responses: {
-            /** @description File metadata was recorded; binary storage is still pending */
-            202: {
+            /** @description File persisted in Spaces and asset metadata saved as READY */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -232,6 +236,13 @@ export interface operations {
             };
             /** @description Authentication required */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Spaces upload failed; caller must upload the file again */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

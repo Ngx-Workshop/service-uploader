@@ -2,9 +2,12 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Model } from 'mongoose';
 import { Asset, AssetStorageStatus } from './schemas/asset.schema';
+import { SpacesStorageService } from './spaces-storage.service';
 import { ReceivedAssetFile, UploaderService } from './uploader.service';
 
 class FakeAssetModel {
+  static save = jest.fn();
+  static saved: Record<string, unknown>[] = [];
   static constructorCalls = 0;
   static findById = jest.fn();
   static findByIdAndUpdate = jest.fn();
@@ -17,17 +20,40 @@ class FakeAssetModel {
   }
 
   save(): Promise<Asset> {
-    return Promise.resolve(this as unknown as Asset);
+    FakeAssetModel.saved.push({ ...this } as unknown as Record<
+      string,
+      unknown
+    >);
+    return FakeAssetModel.save(this) as Promise<Asset>;
   }
 }
 
 describe('UploaderService', () => {
   let service: UploaderService;
+  const storage = { put: jest.fn(), objectUrl: jest.fn() };
+  const file: ReceivedAssetFile = {
+    buffer: Buffer.from('asset'),
+    mimetype: 'image/png',
+    originalname: '../logo.png',
+    size: 5,
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
     FakeAssetModel.constructorCalls = 0;
-    service = new UploaderService(FakeAssetModel as unknown as Model<Asset>);
+    FakeAssetModel.saved = [];
+    FakeAssetModel.save
+      .mockReset()
+      .mockImplementation((asset: Asset) => Promise.resolve(asset));
+    storage.put.mockReset().mockResolvedValue(undefined);
+    storage.objectUrl.mockImplementation(
+      (key: string) =>
+        `https://ngx-workshop-assets.sfo3.digitaloceanspaces.com/${key}`
+    );
+    service = new UploaderService(
+      FakeAssetModel as unknown as Model<Asset>,
+      storage as unknown as SpacesStorageService
+    );
   });
 
   it('creates metadata in the awaiting-upload state', async () => {
@@ -39,7 +65,7 @@ describe('UploaderService', () => {
     });
   });
 
-  it('fingerprints a received file and marks it pending storage', async () => {
+  it('stores received bytes and marks the asset ready after acknowledgement', async () => {
     const buffer = Buffer.from('asset contents');
     const file: ReceivedAssetFile = {
       buffer,
@@ -59,9 +85,55 @@ describe('UploaderService', () => {
       mediaType: 'image/png',
       sizeBytes: buffer.length,
       checksumSha256: createHash('sha256').update(buffer).digest('hex'),
-      storageStatus: AssetStorageStatus.PENDING_STORAGE,
+      storageStatus: AssetStorageStatus.READY,
     });
     expect(result).not.toHaveProperty('buffer');
+    expect(result.storageKey).toMatch(/^uploads\/[0-9a-f-]+\.png$/);
+    expect(storage.put).toHaveBeenCalledWith(
+      result.storageKey,
+      buffer,
+      file.mimetype
+    );
+    expect(FakeAssetModel.saved.map((asset) => asset.storageStatus)).toEqual([
+      AssetStorageStatus.PENDING_STORAGE,
+      AssetStorageStatus.READY,
+    ]);
+  });
+
+  it('records failed storage and returns a generic 503', async () => {
+    storage.put.mockRejectedValue(new Error('sensitive provider detail'));
+    await expect(service.receiveUpload(file, {})).rejects.toMatchObject({
+      status: 503,
+      message: 'Asset storage failed; upload the file again',
+    });
+    expect(FakeAssetModel.saved.map((asset) => asset.storageStatus)).toEqual([
+      AssetStorageStatus.PENDING_STORAGE,
+      AssetStorageStatus.STORAGE_FAILED,
+    ]);
+  });
+
+  it('does not transfer bytes if the initial metadata save fails', async () => {
+    FakeAssetModel.save.mockRejectedValueOnce(
+      new Error('database unavailable')
+    );
+    await expect(service.receiveUpload(file, {})).rejects.toThrow(
+      'database unavailable'
+    );
+    expect(storage.put).not.toHaveBeenCalled();
+  });
+
+  it('does not report success when the final metadata save fails', async () => {
+    FakeAssetModel.save
+      .mockImplementationOnce((asset: Asset) => Promise.resolve(asset))
+      .mockRejectedValueOnce(new Error('database unavailable'));
+    await expect(service.receiveUpload(file, {})).rejects.toThrow(
+      'database unavailable'
+    );
+    expect(storage.put).toHaveBeenCalledTimes(1);
+    expect(FakeAssetModel.saved[0]).toMatchObject({
+      storageStatus: AssetStorageStatus.PENDING_STORAGE,
+      storageKey: expect.any(String) as unknown,
+    });
   });
 
   it('rejects an empty upload', async () => {
@@ -77,6 +149,7 @@ describe('UploaderService', () => {
       )
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(FakeAssetModel.constructorCalls).toBe(0);
+    expect(storage.put).not.toHaveBeenCalled();
   });
 
   it('returns not found when an asset does not exist', async () => {

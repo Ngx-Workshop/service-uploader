@@ -120,8 +120,8 @@
           }
         },
         "responses": {
-          "202": {
-            "description": "File metadata was recorded; binary storage is still pending",
+          "201": {
+            "description": "File persisted in Spaces and asset metadata saved as READY",
             "content": {
               "application/json": {
                 "schema": {
@@ -135,6 +135,9 @@
           },
           "401": {
             "description": "Authentication required"
+          },
+          "503": {
+            "description": "Spaces upload failed; caller must upload the file again"
           }
         },
         "security": [
@@ -145,7 +148,7 @@
             "bearer": []
           }
         ],
-        "summary": "Receive a file and record it as pending durable storage",
+        "summary": "Persist a file in Spaces and record its asset metadata",
         "tags": [
           "uploader"
         ]
@@ -462,8 +465,18 @@
             "type": "string",
             "enum": [
               "AWAITING_UPLOAD",
-              "PENDING_STORAGE"
+              "PENDING_STORAGE",
+              "READY",
+              "STORAGE_FAILED"
             ]
+          },
+          "storageKey": {
+            "type": "string",
+            "description": "Server-generated Spaces object key"
+          },
+          "storageUrl": {
+            "type": "string",
+            "description": "Spaces origin URL; read access depends on object permissions"
           },
           "originalFilename": {
             "type": "string"

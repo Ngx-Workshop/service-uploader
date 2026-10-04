@@ -4,6 +4,8 @@ import { HydratedDocument } from 'mongoose';
 export enum AssetStorageStatus {
   AWAITING_UPLOAD = 'AWAITING_UPLOAD',
   PENDING_STORAGE = 'PENDING_STORAGE',
+  READY = 'READY',
+  STORAGE_FAILED = 'STORAGE_FAILED',
 }
 
 export type AssetDocument = HydratedDocument<Asset>;
@@ -35,6 +37,12 @@ export class Asset {
     default: AssetStorageStatus.AWAITING_UPLOAD,
   })
   storageStatus: AssetStorageStatus;
+
+  @Prop()
+  storageKey?: string;
+
+  @Prop()
+  storageUrl?: string;
 
   @Prop({ maxlength: 255 })
   originalFilename?: string;

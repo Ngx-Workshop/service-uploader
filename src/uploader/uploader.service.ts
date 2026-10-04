@@ -1,11 +1,14 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
+  ServiceUnavailableException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Model } from 'mongoose';
+import { SpacesStorageService } from './spaces-storage.service';
 import {
   CreateAssetDto,
   UpdateAssetDto,
@@ -26,9 +29,11 @@ export interface ReceivedAssetFile {
 
 @Injectable()
 export class UploaderService {
+  private readonly logger = new Logger(UploaderService.name);
   constructor(
     @InjectModel(Asset.name)
-    private readonly assetModel: Model<Asset>
+    private readonly assetModel: Model<Asset>,
+    private readonly storage: SpacesStorageService
   ) {}
 
   async create(createAssetDto: CreateAssetDto): Promise<AssetDocument> {
@@ -52,7 +57,12 @@ export class UploaderService {
       );
     }
 
+    const extension =
+      /\.[a-zA-Z0-9]{1,10}$/.exec(file.originalname)?.[0].toLowerCase() ?? '';
+    const storageKey = `uploads/${randomUUID()}${extension}`;
     const asset = new this.assetModel({
+      storageKey,
+      storageUrl: this.storage.objectUrl(storageKey),
       name: uploadAssetDto.name ?? file.originalname.slice(0, 120),
       description: uploadAssetDto.description,
       originalFilename: file.originalname,
@@ -63,6 +73,26 @@ export class UploaderService {
       storageStatus: AssetStorageStatus.PENDING_STORAGE,
     });
 
+    // Persist the intended location before transferring bytes so partial failures
+    // leave an identifiable record for reconciliation.
+    await asset.save();
+    try {
+      await this.storage.put(storageKey, file.buffer, file.mimetype);
+    } catch {
+      asset.storageStatus = AssetStorageStatus.STORAGE_FAILED;
+      try {
+        await asset.save();
+      } catch {
+        this.logger.error(`Could not record storage failure for ${storageKey}`);
+      }
+      throw new ServiceUnavailableException(
+        'Asset storage failed; upload the file again'
+      );
+    }
+
+    asset.storageStatus = AssetStorageStatus.READY;
+    // If this write fails, the persisted record remains pending, with its key.
+    // Keep the stored object: a database timeout can have an uncertain outcome.
     return asset.save();
   }
 

@@ -79,6 +79,14 @@ export class AssetDto {
   @ApiProperty({ enum: AssetStorageStatus })
   storageStatus: AssetStorageStatus;
 
+  @ApiPropertyOptional({ description: 'Server-generated Spaces object key' })
+  storageKey?: string;
+
+  @ApiPropertyOptional({
+    description: 'Spaces origin URL; read access depends on object permissions',
+  })
+  storageUrl?: string;
+
   @ApiPropertyOptional()
   originalFilename?: string;
 

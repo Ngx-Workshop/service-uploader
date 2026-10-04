@@ -13,7 +13,7 @@ describe('UploaderController contract', () => {
     expect(guards).toContain(RemoteAuthGuard);
   });
 
-  it('returns accepted rather than durable-success semantics for uploads', () => {
+  it('returns created after durable upload completion', () => {
     const status = Reflect.getMetadata(
       HTTP_CODE_METADATA,
       // Method decorators attach HTTP metadata directly to the handler.
@@ -21,6 +21,6 @@ describe('UploaderController contract', () => {
       UploaderController.prototype.upload
     ) as number;
 
-    expect(status).toBe(HttpStatus.ACCEPTED);
+    expect(status).toBe(HttpStatus.CREATED);
   });
 });
