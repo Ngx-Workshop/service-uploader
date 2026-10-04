@@ -55,6 +55,17 @@ describe('folder HTTP contract', () => {
       })
       .compile();
     app = module.createNestApplication();
+    app.useGlobalGuards({
+      canActivate: (context: ExecutionContext) => {
+        const req = context
+          .switchToHttp()
+          .getRequest<{ headers: Record<string, unknown> }>();
+        if (!req.headers.authorization) {
+          throw new UnauthorizedException();
+        }
+        return true;
+      },
+    });
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,

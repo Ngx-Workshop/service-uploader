@@ -8,7 +8,6 @@ import {
   Param,
   Patch,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -22,7 +21,6 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { RemoteAuthGuard } from '@tmdjr/ngx-auth-client';
 import { CreateFolderDto, FolderDto, UpdateFolderDto } from './dto/folder.dto';
 import { FoldersService } from './folders.service';
 import { ParseObjectIdPipe } from './pipes/parse-object-id.pipe';
@@ -34,7 +32,6 @@ import { ParseObjectIdPipe } from './pipes/parse-object-id.pipe';
 @ApiBadRequestResponse({
   description: 'Malformed ID or invalid folder metadata',
 })
-@UseGuards(RemoteAuthGuard)
 @Controller('uploader/folders')
 export class FoldersController {
   constructor(private readonly foldersService: FoldersService) {}

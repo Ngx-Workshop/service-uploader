@@ -12,7 +12,6 @@ import {
   Post,
   Query,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -33,7 +32,6 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { RemoteAuthGuard } from '@tmdjr/ngx-auth-client';
 import {
   AssetDto,
   CreateAssetDto,
@@ -54,7 +52,6 @@ export const MAX_ASSET_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 @ApiBearerAuth()
 @ApiCookieAuth('accessToken')
 @ApiUnauthorizedResponse({ description: 'Authentication required' })
-@UseGuards(RemoteAuthGuard)
 @Controller('uploader')
 export class UploaderController {
   constructor(private readonly uploaderService: UploaderService) {}

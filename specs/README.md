@@ -16,6 +16,7 @@ below with relative links. A feature folder contains `spec.md`, `plan.md`,
 | 004 Upload filename normalization | Implemented; integration pending | [Spec](004-upload-filename-normalization/spec.md) | [Plan](004-upload-filename-normalization/plan.md) | [Tasks](004-upload-filename-normalization/tasks.md) | [Handoff](004-upload-filename-normalization/handoff.md) |
 | 005 Browser asset upload formats | Implemented; integration pending | [Spec](005-browser-asset-upload-formats/spec.md) | [Plan](005-browser-asset-upload-formats/plan.md) | [Tasks](005-browser-asset-upload-formats/tasks.md) | [Handoff](005-browser-asset-upload-formats/handoff.md) |
 | 006 Asset folders and duplicate prevention | Implemented; deployment integration pending | [Spec](006-asset-folders/spec.md) | [Plan](006-asset-folders/plan.md) | [Tasks](006-asset-folders/tasks.md) | [Handoff](006-asset-folders/handoff.md) |
+| 007 Auth-client global guards | Complete | [Spec](007-auth-client-global-guards/spec.md) | [Plan](007-auth-client-global-guards/plan.md) | [Tasks](007-auth-client-global-guards/tasks.md) | [Handoff](007-auth-client-global-guards/handoff.md) |
 
 Keep one row per feature, retain completed records for rationale, and update
 status when work changes. Select work from the user's request and this index;

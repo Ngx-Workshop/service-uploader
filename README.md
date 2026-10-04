@@ -25,7 +25,8 @@ Default port: 3010. Confirm this port is available on your service host.
 Contracts: @tmdjr/service-uploader-contracts; directory: contracts/service-uploader.
 The gateway snippet below strips /api and preserves /uploader. Replace the example host with your actual private service host.
 MongoDB and auth are external prerequisites. Compose requires the external ngx-net network.
-All uploader endpoints require `RemoteAuthGuard`. `POST /uploader/upload` accepts
+All uploader endpoints require the auth client's global `AuthenticationGuard`;
+`RolesGuard` is also registered for endpoint role metadata. `POST /uploader/upload` accepts
 one browser image or video (`image/*` or `video/*`) or PDF (`application/pdf`)
 multipart `file` up to 25 MiB, stores it in DigitalOcean Spaces, then returns
 HTTP 201 with `READY`, `storageKey`, and `storageUrl`. Configure

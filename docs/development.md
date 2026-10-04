@@ -122,7 +122,9 @@ from inside Docker, not the host-only localhost example above.
 - Add focused tests for changed controller/service behavior, DTO rejection,
   access policy, not-found/conflict responses, archive state, and version changes
   as applicable. Use model/guard doubles for unit tests.
-- For HTTP tests, reproduce the global validation and cookie setup from `main.ts`.
+- For HTTP tests, reproduce the global validation and cookie setup from `main.ts`;
+  supply auth-client guard doubles when the test module does not import
+  `UploaderModule`.
   Use a disposable database when verifying real persistence behavior.
 - For changed endpoints, build and regenerate contracts, then validate representative
   requests/responses. For auth changes include allowed and denied cases.

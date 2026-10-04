@@ -1,6 +1,13 @@
+import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
-import { NgxAuthClientModule, RemoteAuthGuard } from '@tmdjr/ngx-auth-client';
+import {
+  AuthenticationGuard,
+  NgxAuthClientModule,
+  RemoteAuthGuard,
+  RolesGuard,
+} from '@tmdjr/ngx-auth-client';
 import { Asset, AssetSchema } from './schemas/asset.schema';
 import { UploaderController } from './uploader.controller';
 import { SpacesStorageService } from './spaces-storage.service';
@@ -13,6 +20,7 @@ const isGeneratingOpenApi = process.env.GENERATE_OPENAPI === 'true';
 
 @Module({
   imports: [
+    HttpModule,
     NgxAuthClientModule,
     ...(isGeneratingOpenApi
       ? []
@@ -27,6 +35,14 @@ const isGeneratingOpenApi = process.env.GENERATE_OPENAPI === 'true';
   providers: [
     UploaderService,
     FoldersService,
+    {
+      provide: APP_GUARD,
+      useClass: AuthenticationGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
     ...(isGeneratingOpenApi
       ? [
           {

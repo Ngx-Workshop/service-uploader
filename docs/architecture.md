@@ -21,7 +21,7 @@ HTTP → controller/guards/validation → service → Mongoose model → MongoDB
 | --- | --- | --- |
 | Runtime | `src/main.ts` | Cookies, global whitelist/forbid-extra-fields validation, port 3010 on `0.0.0.0` |
 | Configuration/database | `src/app.module.ts` | Global ConfigModule and `MONGODB_URI`; conditional DB imports |
-| Feature wiring | `src/uploader/uploader.module.ts` | Asset model, auth client, generation-only stubs |
+| Feature wiring | `src/uploader/uploader.module.ts` | Asset model, auth client with global authentication/role guards, generation-only stubs |
 | HTTP | `src/uploader/uploader.controller.ts` | Authenticated `/uploader` CRUD, archive, and browser image/video or PDF multipart upload |
 | Business operations | `src/uploader/uploader.service.ts` | Metadata operations, checksum calculation, Spaces upload lifecycle |
 | Binary storage | `src/uploader/spaces-storage.service.ts` | S3 SDK, configured bucket/endpoint/ACL, runtime credentials, bounded transfer deadline |
@@ -78,19 +78,19 @@ There is no `/api` prefix in `src/main.ts`; the gateway owns the browser prefix.
 
 | Method | Path | Current access | Result |
 | --- | --- | --- | --- |
-| GET | `/uploader` | `RemoteAuthGuard` | List; optional strict booleans `archived`/`root`, or existing `folderId`; `root=true` cannot combine with `folderId` |
-| GET | `/uploader/:id` | `RemoteAuthGuard` | Asset or 404; malformed ID is 400 |
-| POST | `/uploader` | `RemoteAuthGuard` | Create metadata as `AWAITING_UPLOAD`, 201 |
-| POST | `/uploader/upload` | `RemoteAuthGuard` | Persist multipart file in Spaces, save `READY`, 201; duplicate 409, missing folder 404, storage failure 503 |
-| PATCH | `/uploader/:id` | `RemoteAuthGuard` | Update metadata or move using `folderId`; null moves to root |
-| DELETE | `/uploader/:id` | `RemoteAuthGuard` | Delete metadata, 204 |
-| PATCH | `/uploader/:id/archive` | `RemoteAuthGuard` | Archive metadata |
-| PATCH | `/uploader/:id/unarchive` | `RemoteAuthGuard` | Unarchive metadata |
-| POST | `/uploader/folders` | `RemoteAuthGuard` | Create folder `{name}`, 201; duplicate name 409 |
-| GET | `/uploader/folders` | `RemoteAuthGuard` | List folders |
-| GET | `/uploader/folders/:id` | `RemoteAuthGuard` | Folder or 404 |
-| PATCH | `/uploader/folders/:id` | `RemoteAuthGuard` | Rename with `{name}`; duplicate name 409 |
-| DELETE | `/uploader/folders/:id` | `RemoteAuthGuard` | Empty folder deletion, 204; nonempty 409 |
+| GET | `/uploader` | Global `AuthenticationGuard` | List; optional strict booleans `archived`/`root`, or existing `folderId`; `root=true` cannot combine with `folderId` |
+| GET | `/uploader/:id` | Global `AuthenticationGuard` | Asset or 404; malformed ID is 400 |
+| POST | `/uploader` | Global `AuthenticationGuard` | Create metadata as `AWAITING_UPLOAD`, 201 |
+| POST | `/uploader/upload` | Global `AuthenticationGuard` | Persist multipart file in Spaces, save `READY`, 201; duplicate 409, missing folder 404, storage failure 503 |
+| PATCH | `/uploader/:id` | Global `AuthenticationGuard` | Update metadata or move using `folderId`; null moves to root |
+| DELETE | `/uploader/:id` | Global `AuthenticationGuard` | Delete metadata, 204 |
+| PATCH | `/uploader/:id/archive` | Global `AuthenticationGuard` | Archive metadata |
+| PATCH | `/uploader/:id/unarchive` | Global `AuthenticationGuard` | Unarchive metadata |
+| POST | `/uploader/folders` | Global `AuthenticationGuard` | Create folder `{name}`, 201; duplicate name 409 |
+| GET | `/uploader/folders` | Global `AuthenticationGuard` | List folders |
+| GET | `/uploader/folders/:id` | Global `AuthenticationGuard` | Folder or 404 |
+| PATCH | `/uploader/folders/:id` | Global `AuthenticationGuard` | Rename with `{name}`; duplicate name 409 |
+| DELETE | `/uploader/folders/:id` | Global `AuthenticationGuard` | Empty folder deletion, 204; nonempty 409 |
 
 Create metadata and multipart upload accept optional `folderId`; omitted/null
 means root. Existing consumers can omit it. Folder routes are registered before
