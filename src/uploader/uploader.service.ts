@@ -20,6 +20,14 @@ import {
   AssetStorageStatus,
 } from './schemas/asset.schema';
 
+export const HTML_VIDEO_MEDIA_TYPES = [
+  'video/mp4',
+  'video/webm',
+  'video/ogg',
+] as const;
+
+const HTML_VIDEO_MEDIA_TYPE_SET = new Set<string>(HTML_VIDEO_MEDIA_TYPES);
+
 export interface ReceivedAssetFile {
   buffer: Buffer;
   mimetype: string;
@@ -50,6 +58,11 @@ export class UploaderService {
   ): Promise<AssetDocument> {
     if (file.size === 0 || file.buffer.length === 0) {
       throw new BadRequestException('Uploaded file must not be empty');
+    }
+    if (!HTML_VIDEO_MEDIA_TYPE_SET.has(file.mimetype)) {
+      throw new BadRequestException(
+        `Uploaded file must use one of: ${HTML_VIDEO_MEDIA_TYPES.join(', ')}`
+      );
     }
     if (!file.originalname || file.originalname.length > 255) {
       throw new BadRequestException(

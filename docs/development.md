@@ -49,6 +49,10 @@ Publishing is a separate release action. The publish script invokes
 Generated files must not replace DTO/controller source as the source of truth.
 Do not claim a version is published merely because local generation succeeded.
 
+`POST /uploader/upload` accepts only HTML video formats `video/mp4`,
+`video/webm`, and `video/ogg`. The HTTP file validator checks detected file
+signatures; direct service callers receive the same MIME allowlist validation.
+
 ## Docker
 
 Use `docker compose -f docker-compose.yml up --build`. The file expects `.env`

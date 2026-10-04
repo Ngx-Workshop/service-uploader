@@ -22,7 +22,7 @@ HTTP → controller/guards/validation → service → Mongoose model → MongoDB
 | Runtime | `src/main.ts` | Cookies, global whitelist/forbid-extra-fields validation, port 3010 on `0.0.0.0` |
 | Configuration/database | `src/app.module.ts` | Global ConfigModule and `MONGODB_URI`; conditional DB imports |
 | Feature wiring | `src/uploader/uploader.module.ts` | Asset model, auth client, generation-only stubs |
-| HTTP | `src/uploader/uploader.controller.ts` | Authenticated `/uploader` CRUD, archive, and multipart upload |
+| HTTP | `src/uploader/uploader.controller.ts` | Authenticated `/uploader` CRUD, archive, and MP4/WebM/Ogg multipart upload |
 | Business operations | `src/uploader/uploader.service.ts` | Metadata operations, checksum calculation, Spaces upload lifecycle |
 | Binary storage | `src/uploader/spaces-storage.service.ts` | S3 SDK, configured bucket/endpoint/ACL, runtime credentials, bounded transfer deadline |
 | Input/output shapes | `src/uploader/dto/asset.dto.ts` | Validated create/update/upload DTOs and response shape |
@@ -34,9 +34,11 @@ HTTP → controller/guards/validation → service → Mongoose model → MongoDB
 
 `name` is required. Optional caller metadata includes `description`, up to 50
 tags, and archive state. Metadata-only records start as `AWAITING_UPLOAD`.
-Multipart intake records the original filename, caller-supplied media type, byte
-size, receipt time, and SHA-256 checksum as `PENDING_STORAGE`. Those client fields
-are metadata, not trusted storage paths or content verification. The 25 MiB
+Multipart intake accepts only MP4, WebM, and Ogg video. It verifies the detected
+file signature at the HTTP boundary and records the original filename, allowed
+media type, byte size, receipt time, and SHA-256 checksum as `PENDING_STORAGE`.
+Those client fields are metadata, not trusted storage paths or content verification.
+The 25 MiB
 in-memory buffer is uploaded synchronously to Spaces. The service first saves a
 `PENDING_STORAGE` record with a generated `storageKey` and `storageUrl`, sends the
 bytes, then saves `READY`. Storage errors attempt to save `STORAGE_FAILED` and

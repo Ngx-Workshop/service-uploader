@@ -104,7 +104,8 @@
                 "properties": {
                   "file": {
                     "type": "string",
-                    "format": "binary"
+                    "format": "binary",
+                    "description": "HTML video file (video/mp4, video/webm, video/ogg)"
                   },
                   "name": {
                     "type": "string",
@@ -131,7 +132,7 @@
             }
           },
           "400": {
-            "description": "File is missing, empty, too large, or metadata is invalid"
+            "description": "File is missing, empty, too large, not an MP4, WebM, or Ogg video, or metadata is invalid"
           },
           "401": {
             "description": "Authentication required"

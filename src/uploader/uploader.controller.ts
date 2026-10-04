@@ -40,9 +40,14 @@ import {
   UploadAssetDto,
 } from './dto/asset.dto';
 import { ParseObjectIdPipe } from './pipes/parse-object-id.pipe';
-import { ReceivedAssetFile, UploaderService } from './uploader.service';
+import {
+  HTML_VIDEO_MEDIA_TYPES,
+  ReceivedAssetFile,
+  UploaderService,
+} from './uploader.service';
 
 export const MAX_ASSET_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+const HTML_VIDEO_MEDIA_TYPE_PATTERN = /^video\/(?:mp4|webm|ogg)$/;
 
 @ApiTags('uploader')
 @ApiBearerAuth()
@@ -76,7 +81,11 @@ export class UploaderController {
       type: 'object',
       required: ['file'],
       properties: {
-        file: { type: 'string', format: 'binary' },
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: `HTML video file (${HTML_VIDEO_MEDIA_TYPES.join(', ')})`,
+        },
         name: { type: 'string', maxLength: 120 },
         description: { type: 'string', maxLength: 2000 },
       },
@@ -87,7 +96,8 @@ export class UploaderController {
     description: 'File persisted in Spaces and asset metadata saved as READY',
   })
   @ApiBadRequestResponse({
-    description: 'File is missing, empty, too large, or metadata is invalid',
+    description:
+      'File is missing, empty, too large, not an MP4, WebM, or Ogg video, or metadata is invalid',
   })
   @ApiServiceUnavailableResponse({
     description: 'Spaces upload failed; caller must upload the file again',
@@ -96,6 +106,7 @@ export class UploaderController {
     @UploadedFile(
       new ParseFilePipeBuilder()
         .addMaxSizeValidator({ maxSize: MAX_ASSET_FILE_SIZE_BYTES })
+        .addFileTypeValidator({ fileType: HTML_VIDEO_MEDIA_TYPE_PATTERN })
         .build({ fileIsRequired: true })
     )
     file: ReceivedAssetFile,

@@ -33,8 +33,8 @@ describe('UploaderService', () => {
   const storage = { put: jest.fn(), objectUrl: jest.fn() };
   const file: ReceivedAssetFile = {
     buffer: Buffer.from('asset'),
-    mimetype: 'image/png',
-    originalname: '../logo.png',
+    mimetype: 'video/mp4',
+    originalname: '../workshop.mp4',
     size: 5,
   };
 
@@ -69,8 +69,8 @@ describe('UploaderService', () => {
     const buffer = Buffer.from('asset contents');
     const file: ReceivedAssetFile = {
       buffer,
-      mimetype: 'image/png',
-      originalname: 'logo.png',
+      mimetype: 'video/mp4',
+      originalname: 'workshop.mp4',
       size: buffer.length,
     };
 
@@ -79,16 +79,16 @@ describe('UploaderService', () => {
     });
 
     expect(result).toMatchObject({
-      name: 'logo.png',
+      name: 'workshop.mp4',
       description: 'Primary logo',
-      originalFilename: 'logo.png',
-      mediaType: 'image/png',
+      originalFilename: 'workshop.mp4',
+      mediaType: 'video/mp4',
       sizeBytes: buffer.length,
       checksumSha256: createHash('sha256').update(buffer).digest('hex'),
       storageStatus: AssetStorageStatus.READY,
     });
     expect(result).not.toHaveProperty('buffer');
-    expect(result.storageKey).toMatch(/^uploads\/[0-9a-f-]+\.png$/);
+    expect(result.storageKey).toMatch(/^uploads\/[0-9a-f-]+\.mp4$/);
     expect(storage.put).toHaveBeenCalledWith(
       result.storageKey,
       buffer,
@@ -141,8 +141,8 @@ describe('UploaderService', () => {
       service.receiveUpload(
         {
           buffer: Buffer.alloc(0),
-          mimetype: 'application/octet-stream',
-          originalname: 'empty.bin',
+          mimetype: 'video/mp4',
+          originalname: 'empty.mp4',
           size: 0,
         },
         {}
@@ -151,6 +151,20 @@ describe('UploaderService', () => {
     expect(FakeAssetModel.constructorCalls).toBe(0);
     expect(storage.put).not.toHaveBeenCalled();
   });
+
+  it.each(['image/png', 'video/avi', 'application/octet-stream'])(
+    'rejects unsupported file media type %s before persisting or transferring',
+    async (mimetype) => {
+      await expect(
+        service.receiveUpload({ ...file, mimetype }, {})
+      ).rejects.toThrow(
+        'Uploaded file must use one of: video/mp4, video/webm, video/ogg'
+      );
+
+      expect(FakeAssetModel.constructorCalls).toBe(0);
+      expect(storage.put).not.toHaveBeenCalled();
+    }
+  );
 
   it('returns not found when an asset does not exist', async () => {
     FakeAssetModel.findById.mockReturnValue({

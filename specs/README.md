@@ -12,6 +12,7 @@ below with relative links. A feature folder contains `spec.md`, `plan.md`,
 | --- | --- | --- | --- | --- | --- |
 | 001 Asset uploader API | Superseded storage boundary by 002 | [Spec](001-asset-uploader/spec.md) | [Plan](001-asset-uploader/plan.md) | [Tasks](001-asset-uploader/tasks.md) | [Handoff](001-asset-uploader/handoff.md) |
 | 002 Spaces storage | Implemented; live integration pending | [Spec](002-spaces-storage/spec.md) | [Plan](002-spaces-storage/plan.md) | [Tasks](002-spaces-storage/tasks.md) | [Handoff](002-spaces-storage/handoff.md) |
+| 003 HTML video upload validation | Implemented; integration pending | [Spec](003-html-video-upload-validation/spec.md) | [Plan](003-html-video-upload-validation/plan.md) | [Tasks](003-html-video-upload-validation/tasks.md) | [Handoff](003-html-video-upload-validation/handoff.md) |
 
 Keep one row per feature, retain completed records for rationale, and update
 status when work changes. Select work from the user's request and this index;

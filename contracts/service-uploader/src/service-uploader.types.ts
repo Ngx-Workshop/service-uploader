@@ -210,7 +210,10 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": {
-                    /** Format: binary */
+                    /**
+                     * Format: binary
+                     * @description HTML video file (video/mp4, video/webm, video/ogg)
+                     */
                     file: string;
                     name?: string;
                     description?: string;
@@ -227,7 +230,7 @@ export interface operations {
                     "application/json": components["schemas"]["AssetDto"];
                 };
             };
-            /** @description File is missing, empty, too large, or metadata is invalid */
+            /** @description File is missing, empty, too large, not an MP4, WebM, or Ogg video, or metadata is invalid */
             400: {
                 headers: {
                     [name: string]: unknown;
