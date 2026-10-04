@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
 export enum AssetStorageStatus {
   AWAITING_UPLOAD = 'AWAITING_UPLOAD',
@@ -16,6 +16,14 @@ export type AssetDocument = HydratedDocument<Asset>;
   versionKey: false,
 })
 export class Asset {
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Folder',
+    default: null,
+    index: true,
+  })
+  folderId: Types.ObjectId | null;
+
   @Prop({ required: true, trim: true, maxlength: 120 })
   name: string;
 
@@ -65,3 +73,16 @@ export class Asset {
 }
 
 export const AssetSchema = SchemaFactory.createForClass(Asset);
+AssetSchema.index(
+  { checksumSha256: 1 },
+  {
+    unique: true,
+    name: 'unique_active_checksum',
+    partialFilterExpression: {
+      checksumSha256: { $type: 'string' },
+      storageStatus: {
+        $in: [AssetStorageStatus.PENDING_STORAGE, AssetStorageStatus.READY],
+      },
+    },
+  }
+);

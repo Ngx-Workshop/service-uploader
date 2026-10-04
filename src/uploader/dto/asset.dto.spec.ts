@@ -1,6 +1,6 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreateAssetDto, UploadAssetDto } from './asset.dto';
+import { CreateAssetDto, UpdateAssetDto, UploadAssetDto } from './asset.dto';
 
 describe('asset DTO validation', () => {
   it('accepts valid metadata', async () => {
@@ -33,5 +33,23 @@ describe('asset DTO validation', () => {
     });
 
     await expect(validate(dto)).resolves.toHaveLength(0);
+  });
+
+  it.each([CreateAssetDto, UpdateAssetDto, UploadAssetDto])(
+    'rejects malformed folder IDs in %p',
+    async (Dto) => {
+      const dto = plainToInstance(Dto, {
+        name: 'Asset',
+        folderId: 'invalid',
+      });
+      const errors = await validate(dto);
+      expect(errors.map((error) => error.property)).toContain('folderId');
+    }
+  );
+
+  it('accepts explicit null for a root move', async () => {
+    await expect(
+      validate(plainToInstance(UpdateAssetDto, { folderId: null }))
+    ).resolves.toHaveLength(0);
   });
 });

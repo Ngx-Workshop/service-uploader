@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsNotEmpty,
+  IsMongoId,
   IsOptional,
   IsString,
   MaxLength,
@@ -11,6 +12,15 @@ import {
 import { AssetStorageStatus } from '../schemas/asset.schema';
 
 export class CreateAssetDto {
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: 'Virtual folder ID; omit or use null for root',
+  })
+  @IsMongoId()
+  @IsOptional()
+  folderId?: string | null;
+
   @ApiProperty({ maxLength: 120 })
   @IsString()
   @IsNotEmpty()
@@ -41,6 +51,15 @@ export class UpdateAssetDto extends PartialType(CreateAssetDto) {}
 
 export class UploadAssetDto {
   @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: 'Destination folder ID; omit for root',
+  })
+  @IsMongoId()
+  @IsOptional()
+  folderId?: string | null;
+
+  @ApiPropertyOptional({
     description: 'Display name; defaults to the original filename',
     maxLength: 120,
   })
@@ -58,6 +77,13 @@ export class UploadAssetDto {
 }
 
 export class AssetDto {
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: 'Virtual folder ID; absent or null means root',
+  })
+  folderId?: string | null;
+
   @ApiProperty()
   _id: string;
 

@@ -9,7 +9,7 @@ Nginx/gateway layer. Services own bounded data domains and share contracts throu
 published npm packages. A frontend accesses browser-relative API paths through the
 gateway; it does not connect directly to MongoDB.
 
-This service owns asset metadata, authenticated CRUD and multipart intake,
+This service owns asset metadata, virtual folders, authenticated CRUD and multipart intake,
 OpenAPI generation, and the contracts package. It does not own authentication
 accounts, gateway routing, Nginx static serving, or bucket infrastructure. It persists binary content through the Spaces API.
 
@@ -27,6 +27,7 @@ HTTP → controller/guards/validation → service → Mongoose model → MongoDB
 | Binary storage | `src/uploader/spaces-storage.service.ts` | S3 SDK, configured bucket/endpoint/ACL, runtime credentials, bounded transfer deadline |
 | Input/output shapes | `src/uploader/dto/asset.dto.ts` | Validated create/update/upload DTOs and response shape |
 | Persistence | `src/uploader/schemas/asset.schema.ts` | Asset metadata, timestamps, version, archive and storage status |
+| Folders | `src/uploader/folders.controller.ts`, `src/uploader/folders.service.ts`, `src/uploader/schemas/folder.schema.ts` | Guarded flat folder CRUD and transactional asset membership |
 | OpenAPI | `src/swagger.ts`, `openapi.json` | Generated spec, without listening on a port |
 | Consumer package | `contracts/service-uploader/` | Generated types/models and package exports |
 
@@ -53,20 +54,48 @@ retain their metadata-only behavior; they do not revoke or remove stored objects
 Pre-integration pending records have no stored bytes and require reupload. Updates increment
 `version`; Mongoose timestamps maintain `createdAt` and `updatedAt`.
 
+Assets optionally reference a flat virtual folder by `folderId` (ObjectId); null
+or a missing legacy field means root. Folder names are trimmed and unique after
+lowercasing. Moving an asset changes metadata and version only, never its S3 key
+or URL. Folder version advances on rename and membership operations.
+Folder deletion rejects any referenced asset, including archived, failed
+and metadata-only records. Membership changes and deletion use transactions with
+shared folder writes to prevent dangling references; a MongoDB replica set/Atlas
+or transaction-capable sharded cluster is required.
+
+Uploads reserve their existing SHA-256 via a partial unique index before sending
+bytes. PENDING_STORAGE and READY records block identical content globally,
+including archived assets, regardless of name or destination folder. Conflict
+returns 409 without S3 transfer. STORAGE_FAILED releases the reservation; an
+uncertain pending outcome requires reconciliation before retry. Asset metadata
+DELETE also releases it, though stored bytes remain. Runtime startup explicitly
+creates the required asset/folder indexes and fails on unresolved legacy duplicates.
+Missing legacy checksums do not participate in duplicate detection.
+
 ### Native HTTP routes
 
 There is no `/api` prefix in `src/main.ts`; the gateway owns the browser prefix.
 
 | Method | Path | Current access | Result |
 | --- | --- | --- | --- |
-| GET | `/uploader` | `RemoteAuthGuard` | List, optionally filtered by strict boolean `archived` |
+| GET | `/uploader` | `RemoteAuthGuard` | List; optional strict booleans `archived`/`root`, or existing `folderId`; `root=true` cannot combine with `folderId` |
 | GET | `/uploader/:id` | `RemoteAuthGuard` | Asset or 404; malformed ID is 400 |
 | POST | `/uploader` | `RemoteAuthGuard` | Create metadata as `AWAITING_UPLOAD`, 201 |
-| POST | `/uploader/upload` | `RemoteAuthGuard` | Persist multipart file in Spaces, save `READY`, 201; storage failure 503 |
-| PATCH | `/uploader/:id` | `RemoteAuthGuard` | Update mutable caller metadata |
+| POST | `/uploader/upload` | `RemoteAuthGuard` | Persist multipart file in Spaces, save `READY`, 201; duplicate 409, missing folder 404, storage failure 503 |
+| PATCH | `/uploader/:id` | `RemoteAuthGuard` | Update metadata or move using `folderId`; null moves to root |
 | DELETE | `/uploader/:id` | `RemoteAuthGuard` | Delete metadata, 204 |
 | PATCH | `/uploader/:id/archive` | `RemoteAuthGuard` | Archive metadata |
 | PATCH | `/uploader/:id/unarchive` | `RemoteAuthGuard` | Unarchive metadata |
+| POST | `/uploader/folders` | `RemoteAuthGuard` | Create folder `{name}`, 201; duplicate name 409 |
+| GET | `/uploader/folders` | `RemoteAuthGuard` | List folders |
+| GET | `/uploader/folders/:id` | `RemoteAuthGuard` | Folder or 404 |
+| PATCH | `/uploader/folders/:id` | `RemoteAuthGuard` | Rename with `{name}`; duplicate name 409 |
+| DELETE | `/uploader/folders/:id` | `RemoteAuthGuard` | Empty folder deletion, 204; nonempty 409 |
+
+Create metadata and multipart upload accept optional `folderId`; omitted/null
+means root. Existing consumers can omit it. Folder routes are registered before
+the generic asset ID route. Folder responses expose ID/name/version/timestamps;
+the internal normalized name is not part of the API.
 
 ## External owners and contracts
 

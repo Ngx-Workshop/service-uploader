@@ -1,8 +1,9 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { Model } from 'mongoose';
+import { Model, mongo } from 'mongoose';
 import { Asset, AssetStorageStatus } from './schemas/asset.schema';
 import { SpacesStorageService } from './spaces-storage.service';
+import { FoldersService } from './folders.service';
 import {
   normalizeUploadedFilename,
   ReceivedAssetFile,
@@ -17,6 +18,8 @@ class FakeAssetModel {
   static findByIdAndUpdate = jest.fn();
   static findByIdAndDelete = jest.fn();
   static find = jest.fn();
+
+  $session = jest.fn();
 
   constructor(data: Record<string, unknown>) {
     FakeAssetModel.constructorCalls += 1;
@@ -35,6 +38,12 @@ class FakeAssetModel {
 describe('UploaderService', () => {
   let service: UploaderService;
   const storage = { put: jest.fn(), objectUrl: jest.fn() };
+  const folders = {
+    saveAsset: jest.fn(),
+    moveAsset: jest.fn(),
+    removeAsset: jest.fn(),
+    findOne: jest.fn(),
+  };
   const file: ReceivedAssetFile = {
     buffer: Buffer.from('asset'),
     mimetype: 'video/mp4',
@@ -50,13 +59,17 @@ describe('UploaderService', () => {
       .mockReset()
       .mockImplementation((asset: Asset) => Promise.resolve(asset));
     storage.put.mockReset().mockResolvedValue(undefined);
+    folders.saveAsset
+      .mockReset()
+      .mockImplementation((asset: FakeAssetModel) => asset.save());
     storage.objectUrl.mockImplementation(
       (key: string) =>
         `https://ngx-workshop-assets.sfo3.digitaloceanspaces.com/${key}`
     );
     service = new UploaderService(
       FakeAssetModel as unknown as Model<Asset>,
-      storage as unknown as SpacesStorageService
+      storage as unknown as SpacesStorageService,
+      folders as unknown as FoldersService
     );
   });
 
@@ -146,6 +159,83 @@ describe('UploaderService', () => {
       'database unavailable'
     );
     expect(storage.put).not.toHaveBeenCalled();
+  });
+
+  it('rejects concurrent checksum reservation conflicts before transferring bytes', async () => {
+    FakeAssetModel.save.mockRejectedValueOnce(
+      new mongo.MongoServerError({
+        code: 11000,
+        keyPattern: { checksumSha256: 1 },
+        message: 'duplicate checksum',
+      })
+    );
+    await expect(service.receiveUpload(file, {})).rejects.toMatchObject({
+      status: 409,
+      message: 'An asset with identical content already exists',
+    });
+    expect(storage.put).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing destination folders before transferring bytes', async () => {
+    folders.saveAsset.mockRejectedValueOnce(
+      new NotFoundException('Folder not found')
+    );
+    await expect(
+      service.receiveUpload(file, { folderId: '507f1f77bcf86cd799439011' })
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(storage.put).not.toHaveBeenCalled();
+  });
+
+  it('saves the destination folder and detaches the completed session before storage', async () => {
+    const result = await service.receiveUpload(file, {
+      folderId: '507f1f77bcf86cd799439011',
+    });
+    expect(result.folderId).toBe('507f1f77bcf86cd799439011');
+    expect(folders.saveAsset).toHaveBeenCalledWith(result);
+    expect(FakeAssetModel.saved[0].$session).toHaveBeenCalledWith(null);
+  });
+
+  it('uses transactional moves for folder assignment and root moves', async () => {
+    const id = '507f1f77bcf86cd799439011';
+    await service.update(id, { folderId: id });
+    await service.update(id, { folderId: null });
+    expect(folders.moveAsset.mock.calls).toEqual([
+      [id, { folderId: id }],
+      [id, { folderId: null }],
+    ]);
+  });
+
+  it('delegates deletion to transactional membership coordination', async () => {
+    await service.remove('507f1f77bcf86cd799439011');
+    expect(folders.removeAsset).toHaveBeenCalledWith(
+      '507f1f77bcf86cd799439011'
+    );
+  });
+
+  it('filters root assets, including legacy missing folder IDs', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    FakeAssetModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({ exec }),
+    });
+    await service.findAll(false, undefined, true);
+    expect(FakeAssetModel.find).toHaveBeenCalledWith({
+      archived: false,
+      folderId: null,
+    });
+  });
+
+  it('validates folder existence for list filtering', async () => {
+    const id = '507f1f77bcf86cd799439011';
+    const exec = jest.fn().mockResolvedValue([]);
+    FakeAssetModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({ exec }),
+    });
+    await service.findAll(undefined, id);
+    expect(folders.findOne).toHaveBeenCalledWith(id);
+    expect(FakeAssetModel.find).toHaveBeenCalledWith({ folderId: id });
+    await expect(service.findAll(undefined, id, true)).rejects.toBeInstanceOf(
+      BadRequestException
+    );
   });
 
   it('does not report success when the final metadata save fails', async () => {

@@ -4,6 +4,38 @@
  */
 
 export interface paths {
+    "/uploader/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FoldersController_findAll"];
+        put?: never;
+        post: operations["FoldersController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/uploader/folders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FoldersController_findOne"];
+        put?: never;
+        post?: never;
+        delete: operations["FoldersController_remove"];
+        options?: never;
+        head?: never;
+        patch: operations["FoldersController_update"];
+        trace?: never;
+    };
     "/uploader": {
         parameters: {
             query?: never;
@@ -89,13 +121,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CreateFolderDto: {
+            /** @description Unique, case-insensitive name */
+            name: string;
+        };
+        FolderDto: {
+            _id: string;
+            name: string;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        UpdateFolderDto: {
+            /** @description Unique, case-insensitive name */
+            name: string;
+        };
         CreateAssetDto: {
+            /** @description Virtual folder ID; omit or use null for root */
+            folderId?: string | null;
             name: string;
             description?: string;
             tags?: string[];
             archived?: boolean;
         };
         AssetDto: {
+            /** @description Virtual folder ID; absent or null means root */
+            folderId?: string | null;
             _id: string;
             name: string;
             description?: string;
@@ -122,6 +175,8 @@ export interface components {
             updatedAt: string;
         };
         UpdateAssetDto: {
+            /** @description Virtual folder ID; omit or use null for root */
+            folderId?: string | null;
             name?: string;
             description?: string;
             tags?: string[];
@@ -136,10 +191,232 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    FoldersController_findAll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderDto"][];
+                };
+            };
+            /** @description Malformed ID or invalid folder metadata */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FoldersController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFolderDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderDto"];
+                };
+            };
+            /** @description Malformed ID or invalid folder metadata */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Folder name already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FoldersController_findOne: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderDto"];
+                };
+            };
+            /** @description Malformed ID or invalid folder metadata */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Folder not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FoldersController_remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Malformed ID or invalid folder metadata */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Folder not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Folder contains assets (including archived) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FoldersController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateFolderDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderDto"];
+                };
+            };
+            /** @description Malformed ID or invalid folder metadata */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Folder not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Folder name already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     UploaderController_findAll: {
         parameters: {
             query?: {
                 archived?: boolean;
+                folderId?: string;
+                /** @description Only root assets; cannot combine true with folderId */
+                root?: boolean;
             };
             header?: never;
             path?: never;
@@ -155,8 +432,22 @@ export interface operations {
                     "application/json": components["schemas"]["AssetDto"][];
                 };
             };
+            /** @description Invalid filters or folderId combined with root=true */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Authentication required */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Filter folder not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -199,6 +490,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Destination folder not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     UploaderController_upload: {
@@ -218,6 +516,8 @@ export interface operations {
                     file: string;
                     name?: string;
                     description?: string;
+                    /** @description Existing virtual folder ID; omit for root */
+                    folderId?: string;
                 };
             };
         };
@@ -240,6 +540,20 @@ export interface operations {
             };
             /** @description Authentication required */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Destination folder not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Identical content already exists (pending or ready, including archived) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -373,7 +687,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Asset not found */
+            /** @description Asset or destination folder not found */
             404: {
                 headers: {
                     [name: string]: unknown;

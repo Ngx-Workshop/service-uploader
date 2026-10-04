@@ -1,6 +1,236 @@
 {
   "openapi": "3.0.0",
   "paths": {
+    "/uploader/folders": {
+      "post": {
+        "operationId": "FoldersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFolderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed ID or invalid folder metadata"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "409": {
+            "description": "Folder name already exists"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "folders"
+        ]
+      },
+      "get": {
+        "operationId": "FoldersController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FolderDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed ID or invalid folder metadata"
+          },
+          "401": {
+            "description": "Authentication required"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/uploader/folders/{id}": {
+      "get": {
+        "operationId": "FoldersController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed ID or invalid folder metadata"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Folder not found"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "folders"
+        ]
+      },
+      "patch": {
+        "operationId": "FoldersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFolderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed ID or invalid folder metadata"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Folder not found"
+          },
+          "409": {
+            "description": "Folder name already exists"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "folders"
+        ]
+      },
+      "delete": {
+        "operationId": "FoldersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "Malformed ID or invalid folder metadata"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "404": {
+            "description": "Folder not found"
+          },
+          "409": {
+            "description": "Folder contains assets (including archived)"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "folders"
+        ]
+      }
+    },
     "/uploader": {
       "post": {
         "operationId": "UploaderController_create",
@@ -31,6 +261,9 @@
           },
           "401": {
             "description": "Authentication required"
+          },
+          "404": {
+            "description": "Destination folder not found"
           }
         },
         "security": [
@@ -55,6 +288,23 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "folderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "root",
+            "required": false,
+            "in": "query",
+            "description": "Only root assets; cannot combine true with folderId",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -71,8 +321,14 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid filters or folderId combined with root=true"
+          },
           "401": {
             "description": "Authentication required"
+          },
+          "404": {
+            "description": "Filter folder not found"
           }
         },
         "security": [
@@ -114,6 +370,10 @@
                   "description": {
                     "type": "string",
                     "maxLength": 2000
+                  },
+                  "folderId": {
+                    "type": "string",
+                    "description": "Existing virtual folder ID; omit for root"
                   }
                 }
               }
@@ -136,6 +396,12 @@
           },
           "401": {
             "description": "Authentication required"
+          },
+          "404": {
+            "description": "Destination folder not found"
+          },
+          "409": {
+            "description": "Identical content already exists (pending or ready, including archived)"
           },
           "503": {
             "description": "Spaces upload failed; caller must upload the file again"
@@ -241,7 +507,7 @@
             "description": "Authentication required"
           },
           "404": {
-            "description": "Asset not found"
+            "description": "Asset or destination folder not found"
           }
         },
         "security": [
@@ -412,9 +678,69 @@
       }
     },
     "schemas": {
+      "CreateFolderDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "Unique, case-insensitive name"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "FolderDto": {
+        "type": "object",
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "_id",
+          "name",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateFolderDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "Unique, case-insensitive name"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
       "CreateAssetDto": {
         "type": "object",
         "properties": {
+          "folderId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Virtual folder ID; omit or use null for root"
+          },
           "name": {
             "type": "string",
             "maxLength": 120
@@ -441,6 +767,11 @@
       "AssetDto": {
         "type": "object",
         "properties": {
+          "folderId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Virtual folder ID; absent or null means root"
+          },
           "_id": {
             "type": "string"
           },
@@ -521,6 +852,11 @@
       "UpdateAssetDto": {
         "type": "object",
         "properties": {
+          "folderId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Virtual folder ID; omit or use null for root"
+          },
           "name": {
             "type": "string",
             "maxLength": 120

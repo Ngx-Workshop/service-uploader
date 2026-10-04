@@ -5,6 +5,9 @@ import { Asset, AssetSchema } from './schemas/asset.schema';
 import { UploaderController } from './uploader.controller';
 import { SpacesStorageService } from './spaces-storage.service';
 import { UploaderService } from './uploader.service';
+import { Folder, FolderSchema } from './schemas/folder.schema';
+import { FoldersController } from './folders.controller';
+import { FoldersService } from './folders.service';
 
 const isGeneratingOpenApi = process.env.GENERATE_OPENAPI === 'true';
 
@@ -16,12 +19,14 @@ const isGeneratingOpenApi = process.env.GENERATE_OPENAPI === 'true';
       : [
           MongooseModule.forFeature([
             { name: Asset.name, schema: AssetSchema },
+            { name: Folder.name, schema: FolderSchema },
           ]),
         ]),
   ],
-  controllers: [UploaderController],
+  controllers: [FoldersController, UploaderController],
   providers: [
     UploaderService,
+    FoldersService,
     ...(isGeneratingOpenApi
       ? [
           {
@@ -30,6 +35,10 @@ const isGeneratingOpenApi = process.env.GENERATE_OPENAPI === 'true';
           },
           {
             provide: getModelToken(Asset.name),
+            useValue: {},
+          },
+          {
+            provide: getModelToken(Folder.name),
             useValue: {},
           },
           {

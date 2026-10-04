@@ -19,6 +19,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiServiceUnavailableResponse,
   ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
@@ -61,6 +62,7 @@ export class UploaderController {
   @Post()
   @ApiCreatedResponse({ type: AssetDto })
   @ApiBadRequestResponse({ description: 'Invalid asset metadata' })
+  @ApiNotFoundResponse({ description: 'Destination folder not found' })
   create(@Body() createAssetDto: CreateAssetDto) {
     return this.uploaderService.create(createAssetDto);
   }
@@ -88,6 +90,10 @@ export class UploaderController {
         },
         name: { type: 'string', maxLength: 120 },
         description: { type: 'string', maxLength: 2000 },
+        folderId: {
+          type: 'string',
+          description: 'Existing virtual folder ID; omit for root',
+        },
       },
     },
   })
@@ -102,6 +108,11 @@ export class UploaderController {
   @ApiServiceUnavailableResponse({
     description: 'Spaces upload failed; caller must upload the file again',
   })
+  @ApiConflictResponse({
+    description:
+      'Identical content already exists (pending or ready, including archived)',
+  })
+  @ApiNotFoundResponse({ description: 'Destination folder not found' })
   upload(
     @UploadedFile(
       new ParseFilePipeBuilder()
@@ -119,13 +130,30 @@ export class UploaderController {
   }
 
   @Get()
+  @ApiBadRequestResponse({
+    description: 'Invalid filters or folderId combined with root=true',
+  })
+  @ApiNotFoundResponse({ description: 'Filter folder not found' })
   @ApiQuery({ name: 'archived', required: false, type: Boolean })
+  @ApiQuery({ name: 'folderId', required: false, type: String })
+  @ApiQuery({
+    name: 'root',
+    required: false,
+    type: Boolean,
+    description: 'Only root assets; cannot combine true with folderId',
+  })
   @ApiOkResponse({ type: AssetDto, isArray: true })
   findAll(
     @Query('archived', new ParseBoolPipe({ optional: true }))
-    archived?: boolean
+    archived?: boolean,
+    @Query('folderId') folderId?: string,
+    @Query('root', new ParseBoolPipe({ optional: true })) root?: boolean
   ) {
-    return this.uploaderService.findAll(archived);
+    const parsedFolderId =
+      folderId === undefined
+        ? undefined
+        : new ParseObjectIdPipe().transform(folderId);
+    return this.uploaderService.findAll(archived, parsedFolderId, root);
   }
 
   @Get(':id')
@@ -139,7 +167,7 @@ export class UploaderController {
   @Patch(':id')
   @ApiOkResponse({ type: AssetDto })
   @ApiBadRequestResponse({ description: 'Malformed ID or invalid metadata' })
-  @ApiNotFoundResponse({ description: 'Asset not found' })
+  @ApiNotFoundResponse({ description: 'Asset or destination folder not found' })
   update(
     @Param('id', ParseObjectIdPipe) id: string,
     @Body() updateAssetDto: UpdateAssetDto

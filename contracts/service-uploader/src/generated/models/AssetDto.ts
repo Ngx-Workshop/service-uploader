@@ -3,6 +3,10 @@
 /* tslint:disable */
 /* eslint-disable */
 export type AssetDto = {
+    /**
+     * Virtual folder ID; absent or null means root
+     */
+    folderId?: string | null;
     _id: string;
     name: string;
     description?: string;

@@ -1,14 +1,18 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   ServiceUnavailableException,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { createHash, randomUUID } from 'node:crypto';
 import { Model } from 'mongoose';
 import { SpacesStorageService } from './spaces-storage.service';
+import { FoldersService } from './folders.service';
+import { isDuplicateKey } from './persistence-errors';
 import {
   CreateAssetDto,
   UpdateAssetDto,
@@ -49,20 +53,27 @@ export function normalizeUploadedFilename(filename: string): string {
 }
 
 @Injectable()
-export class UploaderService {
+export class UploaderService implements OnModuleInit {
   private readonly logger = new Logger(UploaderService.name);
   constructor(
     @InjectModel(Asset.name)
     private readonly assetModel: Model<Asset>,
-    private readonly storage: SpacesStorageService
+    private readonly storage: SpacesStorageService,
+    private readonly folders: FoldersService
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    if (process.env.GENERATE_OPENAPI !== 'true') {
+      await this.assetModel.createIndexes();
+    }
+  }
 
   async create(createAssetDto: CreateAssetDto): Promise<AssetDocument> {
     const asset = new this.assetModel({
       ...createAssetDto,
       storageStatus: AssetStorageStatus.AWAITING_UPLOAD,
     });
-    return asset.save();
+    return this.folders.saveAsset(asset);
   }
 
   async receiveUpload(
@@ -87,11 +98,12 @@ export class UploaderService {
     const extension =
       /\.[a-zA-Z0-9]{1,10}$/.exec(normalizedFilename)?.[0].toLowerCase() ?? '';
     const storageKey = `uploads/${randomUUID()}${extension}`;
-    const asset = new this.assetModel({
+    let asset = new this.assetModel({
       storageKey,
       storageUrl: this.storage.objectUrl(storageKey),
       name: uploadAssetDto.name ?? normalizedFilename.slice(0, 120),
       description: uploadAssetDto.description,
+      folderId: uploadAssetDto.folderId,
       originalFilename: normalizedFilename,
       mediaType: file.mimetype,
       sizeBytes: file.size,
@@ -102,7 +114,18 @@ export class UploaderService {
 
     // Persist the intended location before transferring bytes so partial failures
     // leave an identifiable record for reconciliation.
-    await asset.save();
+    try {
+      asset = await this.folders.saveAsset(asset);
+    } catch (error) {
+      if (isDuplicateKey(error, 'checksumSha256')) {
+        throw new ConflictException(
+          'An asset with identical content already exists'
+        );
+      }
+      throw error;
+    }
+    // Do not reuse the completed membership transaction for subsequent saves.
+    asset.$session(null);
     try {
       await this.storage.put(storageKey, file.buffer, file.mimetype);
     } catch {
@@ -123,8 +146,24 @@ export class UploaderService {
     return asset.save();
   }
 
-  async findAll(archived?: boolean): Promise<AssetDocument[]> {
-    const filter = archived === undefined ? {} : { archived };
+  async findAll(
+    archived?: boolean,
+    folderId?: string,
+    root?: boolean
+  ): Promise<AssetDocument[]> {
+    if (folderId !== undefined && root === true) {
+      throw new BadRequestException(
+        'folderId and root=true cannot be combined'
+      );
+    }
+    if (folderId !== undefined) {
+      await this.folders.findOne(folderId);
+    }
+    const filter = {
+      ...(archived === undefined ? {} : { archived }),
+      ...(folderId === undefined ? {} : { folderId }),
+      ...(root === true ? { folderId: null } : {}),
+    };
     return this.assetModel.find(filter).sort({ createdAt: -1 }).exec();
   }
 
@@ -140,6 +179,9 @@ export class UploaderService {
     id: string,
     updateAssetDto: UpdateAssetDto
   ): Promise<AssetDocument> {
+    if (updateAssetDto.folderId !== undefined) {
+      return this.folders.moveAsset(id, updateAssetDto);
+    }
     const asset = await this.assetModel
       .findByIdAndUpdate(
         id,
@@ -158,10 +200,7 @@ export class UploaderService {
   }
 
   async remove(id: string): Promise<void> {
-    const asset = await this.assetModel.findByIdAndDelete(id).exec();
-    if (!asset) {
-      throw new NotFoundException(`Asset with ID "${id}" not found`);
-    }
+    await this.folders.removeAsset(id);
   }
 
   archive(id: string): Promise<AssetDocument> {

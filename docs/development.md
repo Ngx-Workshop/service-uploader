@@ -8,7 +8,7 @@ committed lockfiles. Registry access may be required for `@tmdjr/ngx-auth-client
 Install with `npm ci`. Supply a local `.env` or environment containing:
 
 ```dotenv
-MONGODB_URI=mongodb://127.0.0.1:27017/service_uploader_dev
+MONGODB_URI=mongodb://127.0.0.1:27017/service_uploader_dev?replicaSet=rs0
 PORT=3010
 AUTH_BASE_URL=http://localhost:3000
 SPACES_ACCESS_KEY_ID=your-spaces-key
@@ -18,7 +18,9 @@ SPACES_ENDPOINT=https://sfo3.digitaloceanspaces.com
 SPACES_OBJECT_ACL=public-read
 ```
 
-The URI is an example for a disposable local database. The auth URL is a
+The URI is an example for a disposable local replica-set database. MongoDB 6+
+with transactions (replica set/Atlas or a sharded cluster) is required for folder
+membership and deletion; standalone MongoDB is no longer sufficient. The auth URL is a
 placeholder for your actual auth service; it does not launch one. Inspect the
 installed auth-client package for additional configuration before testing guarded
 routes. Never set `GENERATE_OPENAPI=true` when running the real API.
@@ -29,7 +31,7 @@ routes. Never set `GENERATE_OPENAPI=true` when running the real API.
 | Build and OpenAPI | `GENERATE_OPENAPI=true npm run build` | `postbuild` generates `openapi.json`; explicit flag avoids import-order issue |
 | Regenerate OpenAPI | `GENERATE_OPENAPI=true npm run openapi` | Uses existing compiled output; build first after source changes |
 | Production runtime | `npm run start:prod` | Runs compiled code with runtime environment |
-| Unit tests | `npm test -- --runInBand` | Focused uploader/model/storage doubles |
+| Unit/HTTP tests | `npm test -- --runInBand` | Uploader/model/storage/auth doubles; opt-in database tests skip without their URI |
 | End-to-end tests | `npm run test:e2e -- --runInBand` | Existing test is stale; see below |
 | Lint | `npm run lint` | Uses `--fix` and can modify files; inspect resulting changes |
 
@@ -57,6 +59,56 @@ validation.
 Uploaded filenames are reduced to a basename, Unicode-normalized, stripped of
 control characters, and have whitespace collapsed before they are persisted or
 used as the default display name.
+
+## Folders and duplicate detection
+
+Folders are virtual, flat, and authenticated. Create/rename via
+`POST /uploader/folders` or `PATCH /uploader/folders/:id` with `{ "name": "Brand" }`.
+Use the returned `_id` in asset create/upload metadata or
+`PATCH /uploader/:id` with `{ "folderId": "<id>" }`. Move to root with
+`{ "folderId": null }`. S3 keys/URLs stay unchanged.
+List a folder using `GET /uploader?folderId=<id>`; root uses `?root=true`.
+Do not combine `folderId` with `root=true`. Delete only empty folders; archived,
+failed and metadata-only assets still count as members.
+
+Identical file bytes return 409 across folders and archived assets. Failed storage
+uploads can retry; pending uncertain outcomes require reconciliation. Deleting
+asset metadata releases duplicate protection but does not delete S3 bytes.
+Index creation runs at runtime startup, even when Mongoose auto-indexing is off.
+
+Before rollout, audit the target database (read-only):
+
+```javascript
+db.assets.aggregate([
+  { $match: {
+    checksumSha256: { $type: "string" },
+    storageStatus: { $in: ["PENDING_STORAGE", "READY"] }
+  } },
+  { $group: { _id: "$checksumSha256", ids: { $push: "$_id" }, count: { $sum: 1 } } },
+  { $match: { count: { $gt: 1 } } }
+]);
+```
+
+For each group, explicitly choose a canonical asset, reconcile links, and remove
+duplicate metadata or correct genuinely failed status. Do not mark successful
+uploads failed just to bypass deduplication. Do not automatically delete objects.
+The service fails startup if these duplicates remain. Legacy assets without a
+checksum require retrieving their original bytes to backfill; absent checksums
+cannot be deduplicated. Existing assets without a folder ID need no migration.
+
+For real database verification, supply a URI for an isolated replica set:
+
+```bash
+MONGODB_FOLDER_TEST_URI='mongodb://127.0.0.1:27017/?replicaSet=rs0' \
+  npm test -- --runInBand --testPathPattern=uploader
+```
+
+The integration suite creates a unique `uploader_folders_test_*` database and drops
+only that database at teardown. It exercises real indexes, transactions, duplicate
+upload races and delete/assignment/move races; storage remains mocked. Do not point
+test tooling at production infrastructure. Test scripts enable Node's experimental
+VM modules because Nest's file-signature validator dynamically imports ESM
+`file-type`; otherwise valid multipart fixtures are rejected inside Jest.
 
 ## Docker
 
@@ -90,8 +142,9 @@ Source observations from 2026-09-29; these are not executed test results.
   has no root controller. It imports the real application/database and does not
   mirror the runtime's global pipe/cookie setup or close the app. Do not count it
   as a working API regression suite.
-- Uploader unit tests use model doubles and do not prove live MongoDB, auth, or
-  gateway integration. Run a disposable-database HTTP suite before production.
+- Default uploader tests use model/auth/storage doubles. The opt-in integration
+  suite tests real MongoDB, not live auth, S3 or gateway. Verify the deployed
+  HTTP path and runtime auth/storage configuration before production.
 - Multipart intake buffers at most 25 MiB per request and uploads synchronously.
   Concurrent uploads multiply memory usage. Storage failures return 503; there is
   no durable retry queue. Pending/failed records require inspection and reupload
