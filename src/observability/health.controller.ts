@@ -1,3 +1,5 @@
+import { Auth } from '@tmdjr/ngx-auth-client';
+import { AuthType } from '@tmdjr/ngx-auth-client/enums/auth-type.enum';
 import { ApiExcludeController } from '@nestjs/swagger';
 import {
   Controller,
@@ -25,6 +27,7 @@ export class HealthController {
   constructor(private readonly health: HealthCheckService) {}
 
   @Get()
+  @Auth(AuthType.None)
   @Header('Cache-Control', 'no-store')
   @HealthCheck()
   @SetMetadata(HEARTBEAT, true)

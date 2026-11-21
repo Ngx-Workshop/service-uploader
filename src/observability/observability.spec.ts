@@ -1,3 +1,9 @@
+import { Reflector } from '@nestjs/core';
+import {
+  AuthenticationGuard,
+  RemoteAuthGuard,
+  RolesGuard,
+} from '@tmdjr/ngx-auth-client';
 import type { Server } from 'node:http';
 import { Controller, Get, INestApplication, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -107,5 +113,34 @@ describe('Service observability', () => {
     } finally {
       write.mockRestore();
     }
+  });
+});
+
+describe('Heartbeat with production authentication guards', () => {
+  let app: INestApplication<Server>;
+  const remote = { canActivate: jest.fn(() => false) };
+  beforeAll(async () => {
+    const module = await Test.createTestingModule({
+      imports: [ObservabilityModule],
+      controllers: [TestController],
+    }).compile();
+    app = module.createNestApplication({ logger: false });
+    const reflector = new Reflector();
+    app.useGlobalGuards(
+      new AuthenticationGuard(reflector, remote as unknown as RemoteAuthGuard),
+      new RolesGuard(reflector)
+    );
+    await app.init();
+  });
+  afterAll(async () => {
+    await app.close();
+  });
+  it('allows GET/HEAD heartbeat while protected routes still require authentication', async () => {
+    await request(app.getHttpServer()).get('/health').expect(200);
+    await request(app.getHttpServer()).head('/health').expect(200);
+    expect(remote.canActivate).not.toHaveBeenCalled();
+    await request(app.getHttpServer()).get('/items/private').expect(401);
+    expect(remote.canActivate).toHaveBeenCalled();
+    await request(app.getHttpServer()).post('/health').expect(404);
   });
 });
