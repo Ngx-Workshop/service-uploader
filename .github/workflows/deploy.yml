@@ -212,7 +212,7 @@ jobs:
             rm -f .env.next
             start_service() {
               docker run -d --name service-uploader --env-file .env --network ngx-net \
-                --restart unless-stopped -p 3010:3010 "$1"
+                --restart unless-stopped --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 -p 3010:3010 "$1"
             }
             rollback() {
               echo 'Deployment failed; restoring previous service if available' >&2

@@ -1,0 +1,3 @@
+# Plan
+
+Add @nestjs/terminus 11.1.1, a repository-local ObservabilityModule, health controller and bootstrap logging helper. Heartbeats are operational endpoints excluded from business OpenAPI/contracts. Custom guards recognize only the marked heartbeat handler; gateway ingress exempts only exact GET/HEAD /health. Add HTTP logging middleware before app routes. Preserve per-service bootstrap options, auth boundaries and host-owned configuration. Use native ConsoleLogger JSON supported by installed Nest 11, without Nest 12-only logging options or a frontend library. Validate isolated real HTTP tests, logging exclusion, existing auth/ingress suites, builds and no business contract drift.
