@@ -187,3 +187,7 @@ After deployment, upload through `/api/uploader/upload` with authentication, che
 the service and confirm the object still downloads. If private ACL is selected,
 verify via authenticated S3 tooling instead. Organization secrets are not readable
 in this local checkout, so local tests use doubles.
+
+## Deployment storage policy
+
+See [deployment cleanup](deployment-cleanup.md) for success-only image/container retention and local verification.
