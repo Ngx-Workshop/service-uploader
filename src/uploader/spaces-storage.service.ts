@@ -1,9 +1,11 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { observeOperation } from '../observability/observability';
 
 @Injectable()
 export class SpacesStorageService implements OnModuleDestroy {
+  private readonly logger = new Logger(SpacesStorageService.name);
   private readonly client: S3Client;
   private readonly bucket: string;
   private readonly endpoint: string;
@@ -57,17 +59,19 @@ export class SpacesStorageService implements OnModuleDestroy {
   }
 
   async put(key: string, buffer: Buffer, mediaType: string): Promise<void> {
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: buffer,
-        ContentLength: buffer.length,
-        ContentType: mediaType,
-        ACL: this.acl,
-      }),
-      { abortSignal: AbortSignal.timeout(60_000) }
-    );
+    await observeOperation(this.logger, 'spaces_put', async () => {
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: buffer,
+          ContentLength: buffer.length,
+          ContentType: mediaType,
+          ACL: this.acl,
+        }),
+        { abortSignal: AbortSignal.timeout(60_000) }
+      );
+    });
   }
 
   onModuleDestroy(): void {

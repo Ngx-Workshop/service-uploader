@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
@@ -11,9 +12,11 @@ import { Folder, FolderDocument } from './schemas/folder.schema';
 import { CreateFolderDto, UpdateFolderDto } from './dto/folder.dto';
 import { UpdateAssetDto } from './dto/asset.dto';
 import { isDuplicateKey } from './persistence-errors';
+import { observeOperation } from '../observability/observability';
 
 @Injectable()
 export class FoldersService implements OnModuleInit {
+  private readonly logger = new Logger(FoldersService.name);
   constructor(
     @InjectModel(Folder.name) private readonly folderModel: Model<Folder>,
     @InjectModel(Asset.name) private readonly assetModel: Model<Asset>
@@ -26,14 +29,16 @@ export class FoldersService implements OnModuleInit {
   }
 
   async create(dto: CreateFolderDto): Promise<FolderDocument> {
-    try {
-      return await new this.folderModel({
-        name: dto.name.trim(),
-        normalizedName: dto.name.trim().toLowerCase(),
-      }).save();
-    } catch (error) {
-      this.rethrowNameConflict(error);
-    }
+    return observeOperation(this.logger, 'folder_create', async () => {
+      try {
+        return await new this.folderModel({
+          name: dto.name.trim(),
+          normalizedName: dto.name.trim().toLowerCase(),
+        }).save();
+      } catch (error) {
+        this.rethrowNameConflict(error);
+      }
+    });
   }
 
   findAll(): Promise<FolderDocument[]> {
@@ -56,47 +61,51 @@ export class FoldersService implements OnModuleInit {
   }
 
   async update(id: string, dto: UpdateFolderDto): Promise<FolderDocument> {
-    try {
-      const folder = await this.folderModel
-        .findByIdAndUpdate(
-          id,
-          {
-            $set: {
-              name: dto.name.trim(),
-              normalizedName: dto.name.trim().toLowerCase(),
+    return observeOperation(this.logger, 'folder_update', async () => {
+      try {
+        const folder = await this.folderModel
+          .findByIdAndUpdate(
+            id,
+            {
+              $set: {
+                name: dto.name.trim(),
+                normalizedName: dto.name.trim().toLowerCase(),
+              },
+              $inc: { version: 1 },
             },
-            $inc: { version: 1 },
-          },
-          { new: true, runValidators: true }
-        )
-        .select('-normalizedName')
-        .exec();
-      if (!folder) {
-        throw new NotFoundException(`Folder with ID "${id}" not found`);
+            { new: true, runValidators: true }
+          )
+          .select('-normalizedName')
+          .exec();
+        if (!folder) {
+          throw new NotFoundException(`Folder with ID "${id}" not found`);
+        }
+        return folder;
+      } catch (error) {
+        this.rethrowNameConflict(error);
       }
-      return folder;
-    } catch (error) {
-      this.rethrowNameConflict(error);
-    }
+    });
   }
 
   async remove(id: string): Promise<void> {
-    await this.assetModel.db.transaction(async (session) => {
-      const folder = await this.folderModel
-        .findByIdAndDelete(id, { session })
-        .exec();
-      if (!folder) {
-        throw new NotFoundException(`Folder with ID "${id}" not found`);
-      }
-      const occupied = await this.assetModel
-        .exists({ folderId: id })
-        .session(session);
-      if (occupied) {
-        throw new ConflictException(
-          'Move assets out before deleting this folder'
-        );
-      }
-    });
+    await observeOperation(this.logger, 'folder_delete', () =>
+      this.assetModel.db.transaction(async (session) => {
+        const folder = await this.folderModel
+          .findByIdAndDelete(id, { session })
+          .exec();
+        if (!folder) {
+          throw new NotFoundException(`Folder with ID "${id}" not found`);
+        }
+        const occupied = await this.assetModel
+          .exists({ folderId: id })
+          .session(session);
+        if (occupied) {
+          throw new ConflictException(
+            'Move assets out before deleting this folder'
+          );
+        }
+      })
+    );
   }
 
   async saveAsset(asset: AssetDocument): Promise<AssetDocument> {

@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, Logger, NotFoundException } from '@nestjs/common';
 import { ClientSession, Model, mongo, Types } from 'mongoose';
 import { FoldersService } from './folders.service';
 import { Asset, AssetDocument } from './schemas/asset.schema';
@@ -46,9 +46,17 @@ describe('FoldersService', () => {
     return chain;
   };
   let service: FoldersService;
+  let log: jest.SpyInstance;
+  let warn: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    log = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+    warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     folderSave
       .mockReset()
       .mockImplementation((folder: unknown) => Promise.resolve(folder));
@@ -57,12 +65,36 @@ describe('FoldersService', () => {
     assets.exists.mockReturnValue({
       session: jest.fn().mockResolvedValue(null),
     });
+
     assets.findByIdAndDelete.mockReturnValue(query({ _id: id }));
     assets.create.mockResolvedValue([{}]);
     service = new FoldersService(
       FolderModel as unknown as Model<Folder>,
       assets as unknown as Model<Asset>
     );
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('logs folder outcomes without private names or raw persistence errors', async () => {
+    await service.create({ name: 'private-folder-name' });
+    folderSave.mockRejectedValueOnce(new Error('private-database-connection'));
+    await expect(
+      service.create({ name: 'private-folder-name' })
+    ).rejects.toThrow('private-database-connection');
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'folder_create', outcome: 'success' })
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'folder_create',
+        outcome: 'failure',
+        reason: 'unexpected_error',
+      })
+    );
+    expect(
+      JSON.stringify({ log: log.mock.calls, warn: warn.mock.calls })
+    ).not.toContain('private-');
   });
 
   it('creates trimmed, case-insensitively unique names', async () => {

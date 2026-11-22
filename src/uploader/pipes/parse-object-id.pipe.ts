@@ -11,3 +11,12 @@ export class ParseObjectIdPipe implements PipeTransform<string, string> {
     return value;
   }
 }
+
+@Injectable()
+export class OptionalParseObjectIdPipe extends ParseObjectIdPipe {
+  transform(value: string): string;
+  transform(value: undefined): undefined;
+  transform(value: string | undefined): string | undefined {
+    return value === undefined ? undefined : super.transform(value);
+  }
+}

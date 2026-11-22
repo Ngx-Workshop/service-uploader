@@ -1,13 +1,24 @@
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { SpacesStorageService } from './spaces-storage.service';
 
 describe('SpacesStorageService', () => {
+  let log: jest.SpyInstance;
+  let warn: jest.SpyInstance;
   const settings = {
     SPACES_ACCESS_KEY_ID: 'test-key',
     SPACES_SECRET_ACCESS_KEY: 'test-secret',
   };
 
+  beforeEach(() => {
+    log = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+    warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+  });
   afterEach(() => jest.restoreAllMocks());
 
   it('sends bytes to the configured bucket with public read access and a deadline', async () => {
@@ -36,7 +47,48 @@ describe('SpacesStorageService', () => {
     expect(storage.objectUrl('uploads/test.png')).toBe(
       'https://ngx-workshop-assets.sfo3.digitaloceanspaces.com/uploads/test.png'
     );
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'spaces_put',
+        outcome: 'success',
+        durationMs: expect.any(Number) as unknown,
+      })
+    );
     storage.onModuleDestroy();
+  });
+
+  it('propagates transfer failures unchanged and excludes all upstream details from logs', async () => {
+    const failure = new Error('private-storage-token');
+    const send = jest.spyOn(
+      S3Client.prototype,
+      'send'
+    ) as unknown as jest.MockedFunction<
+      (command: PutObjectCommand, options?: unknown) => Promise<unknown>
+    >;
+    send.mockRejectedValueOnce(failure);
+    const storage = new SpacesStorageService(new ConfigService(settings));
+    try {
+      await expect(
+        storage.put(
+          'private-object-key',
+          Buffer.from('private-content'),
+          'image/png'
+        )
+      ).rejects.toBe(failure);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'spaces_put',
+          outcome: 'failure',
+          reason: 'unexpected_error',
+        })
+      );
+      expect(log).not.toHaveBeenCalled();
+      expect(JSON.stringify(warn.mock.calls)).not.toMatch(
+        /private-|test-key|test-secret/
+      );
+    } finally {
+      storage.onModuleDestroy();
+    }
   });
 
   it('supports private uploads and alternate bucket configuration', async () => {

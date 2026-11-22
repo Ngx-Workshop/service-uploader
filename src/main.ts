@@ -2,9 +2,10 @@ import {
   configureObservability,
   createServiceLogger,
 } from './observability/observability';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import * as cookieParser from 'cookie-parser';
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- Callable CommonJS dependency.
+import cookieParser = require('cookie-parser');
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -19,4 +20,11 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3010, '0.0.0.0');
 }
-bootstrap();
+bootstrap().catch(() => {
+  new Logger('Bootstrap').error({
+    event: 'service_startup',
+    outcome: 'failure',
+    reason: 'startup_failed',
+  });
+  process.exit(1);
+});

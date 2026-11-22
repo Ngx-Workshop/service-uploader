@@ -70,6 +70,10 @@ jobs:
           GENERATE_OPENAPI: 'true'
         run: |
           npm ci
+          npm run format:check
+          npm run lint:check
+          npm test -- --runInBand
+          npm run test:maintenance
           npm run build
 
       - name: Build contracts

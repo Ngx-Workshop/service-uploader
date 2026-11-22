@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Model, mongo } from 'mongoose';
 import { Asset, AssetStorageStatus } from './schemas/asset.schema';
@@ -37,6 +37,9 @@ class FakeAssetModel {
 
 describe('UploaderService', () => {
   let service: UploaderService;
+  let log: jest.SpyInstance;
+  let warn: jest.SpyInstance;
+  let error: jest.SpyInstance;
   const storage = { put: jest.fn(), objectUrl: jest.fn() };
   const folders = {
     saveAsset: jest.fn(),
@@ -53,6 +56,15 @@ describe('UploaderService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    log = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+    warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     FakeAssetModel.constructorCalls = 0;
     FakeAssetModel.saved = [];
     FakeAssetModel.save
@@ -72,6 +84,8 @@ describe('UploaderService', () => {
       folders as unknown as FoldersService
     );
   });
+
+  afterEach(() => jest.restoreAllMocks());
 
   it('sanitizes paths and normalizes UTF-8 mojibake in uploaded filenames', () => {
     expect(
@@ -121,6 +135,17 @@ describe('UploaderService', () => {
       AssetStorageStatus.PENDING_STORAGE,
       AssetStorageStatus.READY,
     ]);
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'asset_upload',
+        outcome: 'success',
+        durationMs: expect.any(Number) as unknown,
+        operationId: expect.any(String) as unknown,
+      })
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(
+      /asset contents|workshop\.mp4|Primary logo|uploads\/|checksum/
+    );
   });
 
   it('uses the normalized filename for persisted metadata and the default name', async () => {
@@ -149,6 +174,40 @@ describe('UploaderService', () => {
       AssetStorageStatus.PENDING_STORAGE,
       AssetStorageStatus.STORAGE_FAILED,
     ]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'asset_upload',
+        outcome: 'failure',
+        reason: 'unavailable',
+      })
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(
+      'sensitive provider detail'
+    );
+  });
+
+  it('still returns the storage 503 when recording failure also fails', async () => {
+    storage.put.mockRejectedValueOnce(new Error('private-storage-secret'));
+    FakeAssetModel.save
+      .mockImplementationOnce((asset: Asset) => Promise.resolve(asset))
+      .mockRejectedValueOnce(new Error('private-database-secret'));
+    await expect(service.receiveUpload(file, {})).rejects.toMatchObject({
+      status: 503,
+      message: 'Asset storage failed; upload the file again',
+    });
+    expect(storage.put).toHaveBeenCalledTimes(1);
+    expect(FakeAssetModel.saved.map((asset) => asset.storageStatus)).toEqual([
+      AssetStorageStatus.PENDING_STORAGE,
+      AssetStorageStatus.STORAGE_FAILED,
+    ]);
+    expect(error).toHaveBeenCalledWith({
+      event: 'asset_upload_failure_record',
+      outcome: 'failure',
+      reason: 'reconciliation_required',
+      operationId: expect.any(String) as unknown,
+      durationMs: expect.any(Number) as unknown,
+    });
+    expect(JSON.stringify(error.mock.calls)).not.toMatch(/private-|uploads\//);
   });
 
   it('does not transfer bytes if the initial metadata save fails', async () => {

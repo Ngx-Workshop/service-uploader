@@ -14,6 +14,10 @@ import { SpacesStorageService } from './spaces-storage.service';
 import { FoldersService } from './folders.service';
 import { isDuplicateKey } from './persistence-errors';
 import {
+  currentOperationContext,
+  observeOperation,
+} from '../observability/observability';
+import {
   CreateAssetDto,
   UpdateAssetDto,
   UploadAssetDto,
@@ -69,81 +73,95 @@ export class UploaderService implements OnModuleInit {
   }
 
   async create(createAssetDto: CreateAssetDto): Promise<AssetDocument> {
-    const asset = new this.assetModel({
-      ...createAssetDto,
-      storageStatus: AssetStorageStatus.AWAITING_UPLOAD,
+    return observeOperation(this.logger, 'asset_create', async () => {
+      const asset = new this.assetModel({
+        ...createAssetDto,
+        storageStatus: AssetStorageStatus.AWAITING_UPLOAD,
+      });
+      return this.folders.saveAsset(asset);
     });
-    return this.folders.saveAsset(asset);
   }
 
   async receiveUpload(
     file: ReceivedAssetFile,
     uploadAssetDto: UploadAssetDto
   ): Promise<AssetDocument> {
-    if (file.size === 0 || file.buffer.length === 0) {
-      throw new BadRequestException('Uploaded file must not be empty');
-    }
-    if (!BROWSER_ASSET_MEDIA_TYPE_PATTERN.test(file.mimetype)) {
-      throw new BadRequestException(
-        `Uploaded file must use ${BROWSER_ASSET_MEDIA_TYPE_DESCRIPTION}`
-      );
-    }
-    const normalizedFilename = normalizeUploadedFilename(file.originalname);
-    if (!normalizedFilename || normalizedFilename.length > 255) {
-      throw new BadRequestException(
-        'Uploaded file must have a filename no longer than 255 characters'
-      );
-    }
-
-    const extension =
-      /\.[a-zA-Z0-9]{1,10}$/.exec(normalizedFilename)?.[0].toLowerCase() ?? '';
-    const storageKey = `uploads/${randomUUID()}${extension}`;
-    let asset = new this.assetModel({
-      storageKey,
-      storageUrl: this.storage.objectUrl(storageKey),
-      name: uploadAssetDto.name ?? normalizedFilename.slice(0, 120),
-      description: uploadAssetDto.description,
-      folderId: uploadAssetDto.folderId,
-      originalFilename: normalizedFilename,
-      mediaType: file.mimetype,
-      sizeBytes: file.size,
-      checksumSha256: createHash('sha256').update(file.buffer).digest('hex'),
-      receivedAt: new Date(),
-      storageStatus: AssetStorageStatus.PENDING_STORAGE,
-    });
-
-    // Persist the intended location before transferring bytes so partial failures
-    // leave an identifiable record for reconciliation.
-    try {
-      asset = await this.folders.saveAsset(asset);
-    } catch (error) {
-      if (isDuplicateKey(error, 'checksumSha256')) {
-        throw new ConflictException(
-          'An asset with identical content already exists'
+    return observeOperation(this.logger, 'asset_upload', async () => {
+      if (file.size === 0 || file.buffer.length === 0) {
+        throw new BadRequestException('Uploaded file must not be empty');
+      }
+      if (!BROWSER_ASSET_MEDIA_TYPE_PATTERN.test(file.mimetype)) {
+        throw new BadRequestException(
+          `Uploaded file must use ${BROWSER_ASSET_MEDIA_TYPE_DESCRIPTION}`
         );
       }
-      throw error;
-    }
-    // Do not reuse the completed membership transaction for subsequent saves.
-    asset.$session(null);
-    try {
-      await this.storage.put(storageKey, file.buffer, file.mimetype);
-    } catch {
-      asset.storageStatus = AssetStorageStatus.STORAGE_FAILED;
-      try {
-        await asset.save();
-      } catch {
-        this.logger.error(`Could not record storage failure for ${storageKey}`);
+      const normalizedFilename = normalizeUploadedFilename(file.originalname);
+      if (!normalizedFilename || normalizedFilename.length > 255) {
+        throw new BadRequestException(
+          'Uploaded file must have a filename no longer than 255 characters'
+        );
       }
-      throw new ServiceUnavailableException(
-        'Asset storage failed; upload the file again'
-      );
-    }
 
-    asset.storageStatus = AssetStorageStatus.READY;
-    // If this write fails, the persisted record remains pending, with its key.
-    // Keep the stored object: a database timeout can have an uncertain outcome.
-    return asset.save();
+      const extension =
+        /\.[a-zA-Z0-9]{1,10}$/.exec(normalizedFilename)?.[0].toLowerCase() ??
+        '';
+      const storageKey = `uploads/${randomUUID()}${extension}`;
+      let asset = new this.assetModel({
+        storageKey,
+        storageUrl: this.storage.objectUrl(storageKey),
+        name: uploadAssetDto.name ?? normalizedFilename.slice(0, 120),
+        description: uploadAssetDto.description,
+        folderId: uploadAssetDto.folderId,
+        originalFilename: normalizedFilename,
+        mediaType: file.mimetype,
+        sizeBytes: file.size,
+        checksumSha256: createHash('sha256').update(file.buffer).digest('hex'),
+        receivedAt: new Date(),
+        storageStatus: AssetStorageStatus.PENDING_STORAGE,
+      });
+
+      // Persist the intended location before transferring bytes so partial failures
+      // leave an identifiable record for reconciliation.
+      try {
+        asset = await this.folders.saveAsset(asset);
+      } catch (error) {
+        if (isDuplicateKey(error, 'checksumSha256')) {
+          throw new ConflictException(
+            'An asset with identical content already exists'
+          );
+        }
+        throw error;
+      }
+      // Do not reuse the completed membership transaction for subsequent saves.
+      asset.$session(null);
+      try {
+        await this.storage.put(storageKey, file.buffer, file.mimetype);
+      } catch {
+        asset.storageStatus = AssetStorageStatus.STORAGE_FAILED;
+        const failureRecordingStarted = process.hrtime.bigint();
+        try {
+          await asset.save();
+        } catch {
+          this.logger.error({
+            event: 'asset_upload_failure_record',
+            ...currentOperationContext(),
+            outcome: 'failure',
+            reason: 'reconciliation_required',
+            durationMs: Math.round(
+              Number(process.hrtime.bigint() - failureRecordingStarted) / 1e6
+            ),
+          });
+        }
+        throw new ServiceUnavailableException(
+          'Asset storage failed; upload the file again'
+        );
+      }
+
+      asset.storageStatus = AssetStorageStatus.READY;
+      // If this write fails, the persisted record remains pending, with its key.
+      // Keep the stored object: a database timeout can have an uncertain outcome.
+      return asset.save();
+    });
   }
 
   async findAll(
@@ -179,28 +197,32 @@ export class UploaderService implements OnModuleInit {
     id: string,
     updateAssetDto: UpdateAssetDto
   ): Promise<AssetDocument> {
-    if (updateAssetDto.folderId !== undefined) {
-      return this.folders.moveAsset(id, updateAssetDto);
-    }
-    const asset = await this.assetModel
-      .findByIdAndUpdate(
-        id,
-        {
-          $set: updateAssetDto,
-          $inc: { version: 1 },
-        },
-        { new: true, runValidators: true }
-      )
-      .exec();
+    return observeOperation(this.logger, 'asset_update', async () => {
+      if (updateAssetDto.folderId !== undefined) {
+        return this.folders.moveAsset(id, updateAssetDto);
+      }
+      const asset = await this.assetModel
+        .findByIdAndUpdate(
+          id,
+          {
+            $set: updateAssetDto,
+            $inc: { version: 1 },
+          },
+          { new: true, runValidators: true }
+        )
+        .exec();
 
-    if (!asset) {
-      throw new NotFoundException(`Asset with ID "${id}" not found`);
-    }
-    return asset;
+      if (!asset) {
+        throw new NotFoundException(`Asset with ID "${id}" not found`);
+      }
+      return asset;
+    });
   }
 
   async remove(id: string): Promise<void> {
-    await this.folders.removeAsset(id);
+    await observeOperation(this.logger, 'asset_delete', () =>
+      this.folders.removeAsset(id)
+    );
   }
 
   archive(id: string): Promise<AssetDocument> {

@@ -25,15 +25,42 @@ placeholder for your actual auth service; it does not launch one. Inspect the
 installed auth-client package for additional configuration before testing guarded
 routes. Never set `GENERATE_OPENAPI=true` when running the real API.
 
-| Purpose | Command | Notes |
-| --- | --- | --- |
-| Development | `npm run start:dev` | Requires reachable MongoDB |
-| Build and OpenAPI | `GENERATE_OPENAPI=true npm run build` | `postbuild` generates `openapi.json`; explicit flag avoids import-order issue |
-| Regenerate OpenAPI | `GENERATE_OPENAPI=true npm run openapi` | Uses existing compiled output; build first after source changes |
-| Production runtime | `npm run start:prod` | Runs compiled code with runtime environment |
-| Unit/HTTP tests | `npm test -- --runInBand` | Uploader/model/storage/auth doubles; opt-in database tests skip without their URI |
-| End-to-end tests | `npm run test:e2e -- --runInBand` | Existing test is stale; see below |
-| Lint | `npm run lint` | Uses `--fix` and can modify files; inspect resulting changes |
+| Purpose            | Command                                  | Notes                                                                                          |
+| ------------------ | ---------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Development        | `npm run start:dev`                      | Requires reachable MongoDB                                                                     |
+| Build and OpenAPI  | `GENERATE_OPENAPI=true npm run build`    | `postbuild` generates `openapi.json`; explicit flag avoids import-order issue                  |
+| Regenerate OpenAPI | `GENERATE_OPENAPI=true npm run openapi`  | Uses existing compiled output; build first after source changes                                |
+| Production runtime | `npm run start:prod`                     | Runs compiled code with runtime environment                                                    |
+| Unit/HTTP tests    | `npm test -- --runInBand`                | Uploader/model/storage/auth doubles; opt-in database tests skip without their URI              |
+| End-to-end tests   | `npm run test:e2e -- --runInBand`        | Existing test is stale; see below                                                              |
+| Lint check         | `npm run lint:check`                     | Non-mutating; errors and warnings fail                                                         |
+| Formatting check   | `npm run format:check`                   | Non-mutating source/test/tooling baseline                                                      |
+| Hook regression    | `npm run test:maintenance`               | Disposable Git fixtures; never commits this worktree                                           |
+| Install regression | `npm run test:maintenance -- --installs` | Also checks offline clean installs with normal lifecycle scripts; requires populated npm cache |
+| Lint fix           | `npm run lint`                           | Uses `--fix` and can modify files; inspect resulting changes                                   |
+
+## Staged formatting and CI
+
+`npm ci` installs Husky hooks in a developer Git checkout. Preparation is
+self-contained in the manifest so the package-only Docker install layer works.
+It skips hook setup for CI, `HUSKY=0`, production/dev-omitted installations and
+directories without Git. Do not skip all dependency lifecycle scripts just to
+avoid hook setup. `npm install --package-lock-only` before Husky is installed
+should use `HUSKY=0`; the subsequent normal `npm ci` installs the hook.
+
+The pre-commit hook uses only local lint-staged/Prettier executables. It formats
+staged TS/JS/JSON/Markdown/YAML files, preserving partially staged and unrelated
+unstaged edits through lint-staged's default stash/restore behavior. Failures
+block commits. Generated contracts/OpenAPI/lockfile, build/coverage/node_modules,
+vendored/public assets and Husky internals are explicitly excluded.
+Do not disable lint-staged's stash or hide-unstaged behavior.
+
+CI checks source/tests, scripts, manifest, formatter/lint configuration and
+workflow YAML without changing files; it intentionally does not enforce a new
+repository-wide historical Markdown formatting baseline. Only touched files
+were formatted during maintenance. Pull requests run checks/build without
+publishing; main's existing publisher runs the same gates before publication.
+Test doubles remain distinct from live infrastructure acceptance.
 
 ## API/contract changes
 
@@ -80,12 +107,20 @@ Before rollout, audit the target database (read-only):
 
 ```javascript
 db.assets.aggregate([
-  { $match: {
-    checksumSha256: { $type: "string" },
-    storageStatus: { $in: ["PENDING_STORAGE", "READY"] }
-  } },
-  { $group: { _id: "$checksumSha256", ids: { $push: "$_id" }, count: { $sum: 1 } } },
-  { $match: { count: { $gt: 1 } } }
+  {
+    $match: {
+      checksumSha256: { $type: 'string' },
+      storageStatus: { $in: ['PENDING_STORAGE', 'READY'] },
+    },
+  },
+  {
+    $group: {
+      _id: '$checksumSha256',
+      ids: { $push: '$_id' },
+      count: { $sum: 1 },
+    },
+  },
+  { $match: { count: { $gt: 1 } } },
 ]);
 ```
 
@@ -156,14 +191,9 @@ Source observations from 2026-09-29; these are not executed test results.
   DELETE and archive affect metadata only, not object bytes or permissions.
 - Ensure the gateway request body limit allows 25 MiB plus multipart overhead.
   Live Spaces/MongoDB/auth/gateway checks remain deployment verification.
-- `UpdateExampleMongodbDocDto` is declared in both DTO files. The controller uses
-  `update.dto.ts`; avoid extending the unused duplicate by accident.
-- The inactive `src/example-crud` seed remains as reference code and retains its
-  inherited limitations; `AppModule` does not mount it.
 
 Remove/update limitations when fixed. Update architecture and environment guidance
 whenever the corresponding implementation changes.
-
 
 ## Docker deployment environment file
 

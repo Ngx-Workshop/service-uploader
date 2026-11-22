@@ -17,19 +17,31 @@ accounts, gateway routing, Nginx static serving, or bucket infrastructure. It pe
 
 HTTP → controller/guards/validation → service → Mongoose model → MongoDB.
 
-| Concern | Source | Current behavior |
-| --- | --- | --- |
-| Runtime | `src/main.ts` | Cookies, global whitelist/forbid-extra-fields validation, port 3010 on `0.0.0.0` |
-| Configuration/database | `src/app.module.ts` | Global ConfigModule and `MONGODB_URI`; conditional DB imports |
-| Feature wiring | `src/uploader/uploader.module.ts` | Asset model, auth client with global authentication/role guards, generation-only stubs |
-| HTTP | `src/uploader/uploader.controller.ts` | Authenticated `/uploader` CRUD, archive, and browser image/video or PDF multipart upload |
-| Business operations | `src/uploader/uploader.service.ts` | Metadata operations, checksum calculation, Spaces upload lifecycle |
-| Binary storage | `src/uploader/spaces-storage.service.ts` | S3 SDK, configured bucket/endpoint/ACL, runtime credentials, bounded transfer deadline |
-| Input/output shapes | `src/uploader/dto/asset.dto.ts` | Validated create/update/upload DTOs and response shape |
-| Persistence | `src/uploader/schemas/asset.schema.ts` | Asset metadata, timestamps, version, archive and storage status |
-| Folders | `src/uploader/folders.controller.ts`, `src/uploader/folders.service.ts`, `src/uploader/schemas/folder.schema.ts` | Guarded flat folder CRUD and transactional asset membership |
-| OpenAPI | `src/swagger.ts`, `openapi.json` | Generated spec, without listening on a port |
-| Consumer package | `contracts/service-uploader/` | Generated types/models and package exports |
+Maintenance audit: [dependency map and findings](../specs/010-code-maintenance/audit.md).
+The uploader feature intentionally owns both asset and folder models: shared
+folder writes coordinate atomic membership/deletion. It exports no providers and
+has no cyclic dependencies. Controllers delegate business operations; the optional
+folder query ID now uses a Nest pipe rather than manual pipe construction.
+The storage provider owns S3 configuration, deadlines and teardown.
+
+The existing observability utility owns process-local async request/operation
+context. Asset/folder mutation services and the Spaces adapter emit bounded
+structured outcomes through native contextual Logger instances; they do not
+depend on a collector SDK or change database/auth/storage protocols.
+
+| Concern                | Source                                                                                                           | Current behavior                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Runtime                | `src/main.ts`                                                                                                    | Cookies, global whitelist/forbid-extra-fields validation, port 3010 on `0.0.0.0`         |
+| Configuration/database | `src/app.module.ts`                                                                                              | Global ConfigModule and `MONGODB_URI`; conditional DB imports                            |
+| Feature wiring         | `src/uploader/uploader.module.ts`                                                                                | Asset model, auth client with global authentication/role guards, generation-only stubs   |
+| HTTP                   | `src/uploader/uploader.controller.ts`                                                                            | Authenticated `/uploader` CRUD, archive, and browser image/video or PDF multipart upload |
+| Business operations    | `src/uploader/uploader.service.ts`                                                                               | Metadata operations, checksum calculation, Spaces upload lifecycle                       |
+| Binary storage         | `src/uploader/spaces-storage.service.ts`                                                                         | S3 SDK, configured bucket/endpoint/ACL, runtime credentials, bounded transfer deadline   |
+| Input/output shapes    | `src/uploader/dto/asset.dto.ts`                                                                                  | Validated create/update/upload DTOs and response shape                                   |
+| Persistence            | `src/uploader/schemas/asset.schema.ts`                                                                           | Asset metadata, timestamps, version, archive and storage status                          |
+| Folders                | `src/uploader/folders.controller.ts`, `src/uploader/folders.service.ts`, `src/uploader/schemas/folder.schema.ts` | Guarded flat folder CRUD and transactional asset membership                              |
+| OpenAPI                | `src/swagger.ts`, `openapi.json`                                                                                 | Generated spec, without listening on a port                                              |
+| Consumer package       | `contracts/service-uploader/`                                                                                    | Generated types/models and package exports                                               |
 
 ### Data behavior
 
@@ -76,21 +88,21 @@ Missing legacy checksums do not participate in duplicate detection.
 
 There is no `/api` prefix in `src/main.ts`; the gateway owns the browser prefix.
 
-| Method | Path | Current access | Result |
-| --- | --- | --- | --- |
-| GET | `/uploader` | Global `AuthenticationGuard` | List; optional strict booleans `archived`/`root`, or existing `folderId`; `root=true` cannot combine with `folderId` |
-| GET | `/uploader/:id` | Global `AuthenticationGuard` | Asset or 404; malformed ID is 400 |
-| POST | `/uploader` | Global `AuthenticationGuard` | Create metadata as `AWAITING_UPLOAD`, 201 |
-| POST | `/uploader/upload` | Global `AuthenticationGuard` | Persist multipart file in Spaces, save `READY`, 201; duplicate 409, missing folder 404, storage failure 503 |
-| PATCH | `/uploader/:id` | Global `AuthenticationGuard` | Update metadata or move using `folderId`; null moves to root |
-| DELETE | `/uploader/:id` | Global `AuthenticationGuard` | Delete metadata, 204 |
-| PATCH | `/uploader/:id/archive` | Global `AuthenticationGuard` | Archive metadata |
-| PATCH | `/uploader/:id/unarchive` | Global `AuthenticationGuard` | Unarchive metadata |
-| POST | `/uploader/folders` | Global `AuthenticationGuard` | Create folder `{name}`, 201; duplicate name 409 |
-| GET | `/uploader/folders` | Global `AuthenticationGuard` | List folders |
-| GET | `/uploader/folders/:id` | Global `AuthenticationGuard` | Folder or 404 |
-| PATCH | `/uploader/folders/:id` | Global `AuthenticationGuard` | Rename with `{name}`; duplicate name 409 |
-| DELETE | `/uploader/folders/:id` | Global `AuthenticationGuard` | Empty folder deletion, 204; nonempty 409 |
+| Method | Path                      | Current access               | Result                                                                                                               |
+| ------ | ------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/uploader`               | Global `AuthenticationGuard` | List; optional strict booleans `archived`/`root`, or existing `folderId`; `root=true` cannot combine with `folderId` |
+| GET    | `/uploader/:id`           | Global `AuthenticationGuard` | Asset or 404; malformed ID is 400                                                                                    |
+| POST   | `/uploader`               | Global `AuthenticationGuard` | Create metadata as `AWAITING_UPLOAD`, 201                                                                            |
+| POST   | `/uploader/upload`        | Global `AuthenticationGuard` | Persist multipart file in Spaces, save `READY`, 201; duplicate 409, missing folder 404, storage failure 503          |
+| PATCH  | `/uploader/:id`           | Global `AuthenticationGuard` | Update metadata or move using `folderId`; null moves to root                                                         |
+| DELETE | `/uploader/:id`           | Global `AuthenticationGuard` | Delete metadata, 204                                                                                                 |
+| PATCH  | `/uploader/:id/archive`   | Global `AuthenticationGuard` | Archive metadata                                                                                                     |
+| PATCH  | `/uploader/:id/unarchive` | Global `AuthenticationGuard` | Unarchive metadata                                                                                                   |
+| POST   | `/uploader/folders`       | Global `AuthenticationGuard` | Create folder `{name}`, 201; duplicate name 409                                                                      |
+| GET    | `/uploader/folders`       | Global `AuthenticationGuard` | List folders                                                                                                         |
+| GET    | `/uploader/folders/:id`   | Global `AuthenticationGuard` | Folder or 404                                                                                                        |
+| PATCH  | `/uploader/folders/:id`   | Global `AuthenticationGuard` | Rename with `{name}`; duplicate name 409                                                                             |
+| DELETE | `/uploader/folders/:id`   | Global `AuthenticationGuard` | Empty folder deletion, 204; nonempty 409                                                                             |
 
 Create metadata and multipart upload accept optional `folderId`; omitted/null
 means root. Existing consumers can omit it. Folder routes are registered before
@@ -99,13 +111,13 @@ the internal normalized name is not part of the API.
 
 ## External owners and contracts
 
-| External owner | Boundary | Isolated-repository approach |
-| --- | --- | --- |
-| Frontend consumers | `@tmdjr/service-uploader-contracts`, DTOs and native API behavior | Generate/build locally; publish/version separately and hand off consumer migration |
-| `service-auth` | `@tmdjr/ngx-auth-client` module/guard, `AUTH_BASE_URL` configuration | Inspect installed package behavior; mock auth in unit tests |
-| `service-bff-ngx-workshop` / `nginx-ngx-workshop.io` | Routes browser `/api/uploader` to native `/uploader`; routes uploads; clients read asset origin URLs directly | Record desired mapping; do not assume a locally running gateway |
-| MongoDB infrastructure | `MONGODB_URI` supplied at runtime | Use a disposable/local database for integration checks |
-| DigitalOcean Spaces | `ngx-workshop-assets` bucket at sfo3; S3-compatible API | Requires scoped runtime access keys; public object origin URLs replace Nginx local-file serving |
+| External owner                                       | Boundary                                                                                                      | Isolated-repository approach                                                                    |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Frontend consumers                                   | `@tmdjr/service-uploader-contracts`, DTOs and native API behavior                                             | Generate/build locally; publish/version separately and hand off consumer migration              |
+| `service-auth`                                       | `@tmdjr/ngx-auth-client` module/guard, `AUTH_BASE_URL` configuration                                          | Inspect installed package behavior; mock auth in unit tests                                     |
+| `service-bff-ngx-workshop` / `nginx-ngx-workshop.io` | Routes browser `/api/uploader` to native `/uploader`; routes uploads; clients read asset origin URLs directly | Record desired mapping; do not assume a locally running gateway                                 |
+| MongoDB infrastructure                               | `MONGODB_URI` supplied at runtime                                                                             | Use a disposable/local database for integration checks                                          |
+| DigitalOcean Spaces                                  | `ngx-workshop-assets` bucket at sfo3; S3-compatible API                                                       | Requires scoped runtime access keys; public object origin URLs replace Nginx local-file serving |
 
 Names above identify repositories, not filesystem prerequisites. The local
 contracts manifest says `0.0.1`; release versions must be verified independently

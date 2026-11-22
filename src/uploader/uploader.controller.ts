@@ -38,7 +38,10 @@ import {
   UpdateAssetDto,
   UploadAssetDto,
 } from './dto/asset.dto';
-import { ParseObjectIdPipe } from './pipes/parse-object-id.pipe';
+import {
+  OptionalParseObjectIdPipe,
+  ParseObjectIdPipe,
+} from './pipes/parse-object-id.pipe';
 import {
   BROWSER_ASSET_MEDIA_TYPE_DESCRIPTION,
   BROWSER_ASSET_MEDIA_TYPE_PATTERN,
@@ -143,14 +146,10 @@ export class UploaderController {
   findAll(
     @Query('archived', new ParseBoolPipe({ optional: true }))
     archived?: boolean,
-    @Query('folderId') folderId?: string,
+    @Query('folderId', OptionalParseObjectIdPipe) folderId?: string,
     @Query('root', new ParseBoolPipe({ optional: true })) root?: boolean
   ) {
-    const parsedFolderId =
-      folderId === undefined
-        ? undefined
-        : new ParseObjectIdPipe().transform(folderId);
-    return this.uploaderService.findAll(archived, parsedFolderId, root);
+    return this.uploaderService.findAll(archived, folderId, root);
   }
 
   @Get(':id')

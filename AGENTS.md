@@ -20,9 +20,10 @@ All links above resolve within this checkout. Do not assume a sibling repository
 - Inspect relevant source and `git status` before editing; preserve unrelated changes.
 - Maintain a local spec, plan, tasks, and handoff for features and behavior changes.
   Small docs edits and mechanical fixes can use a concise change/verification summary.
-- Distinguish current implementation from intended rules. The seed's CRUD routes
-  are currently unguarded; only `auth-test` uses `RemoteAuthGuard`. Do not describe
-  this as a fully protected production API or silently expand authentication scope.
+- Distinguish current implementation from intended rules. Uploader/folder CRUD
+  uses global auth-client authentication/role guards; GET/HEAD health is explicitly
+  public. Do not silently expand authentication scope or equate local doubles with
+  verified production authorization.
 - Keep controllers, DTO validation, service logic, and persistence responsibilities
   clear. Do not access another service's collections to bypass its API.
 - Regenerate OpenAPI and local contracts for API changes; document consumer impact.
@@ -37,3 +38,13 @@ All links above resolve within this checkout. Do not assume a sibling repository
 
 This is a Markdown workflow inspired by Spec Kit. It does not install Spec Kit,
 register slash commands, or require a particular AI tool.
+
+## Code Maintenance
+
+The selected work is [Code Maintenance](specs/010-code-maintenance/spec.md) (locally verified).
+Read its [plan](specs/010-code-maintenance/plan.md), [tasks](specs/010-code-maintenance/tasks.md) and
+[handoff](specs/010-code-maintenance/handoff.md). Local T001-T010 are complete; retain older unfinished
+feature records without treating them as the next task. The requested work covers
+NestJS module/domain boundaries, thin controllers, cohesive services, Prettier
+with Husky/lint-staged, CI checks and safe domain logging through existing
+observability. Live collector and deployment smoke checks remain external-owner work.

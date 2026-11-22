@@ -216,6 +216,26 @@ describe('folder HTTP contract', () => {
       .expect(400);
   });
 
+  it('preserves optional query ID validation before service delegation', async () => {
+    await request(server)
+      .get('/uploader')
+      .set('Authorization', 'Bearer test')
+      .expect(200);
+    expect(uploader.findAll).toHaveBeenLastCalledWith(
+      undefined,
+      undefined,
+      undefined
+    );
+    uploader.findAll.mockClear();
+    for (const query of ['folderId=', `folderId=${id}&folderId=${id}`]) {
+      await request(server)
+        .get(`/uploader?${query}`)
+        .set('Authorization', 'Bearer test')
+        .expect(400);
+    }
+    expect(uploader.findAll).not.toHaveBeenCalled();
+  });
+
   it('validates multipart folder metadata and exposes duplicate upload 409', async () => {
     const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
     await request(server)
