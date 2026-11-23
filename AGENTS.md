@@ -48,3 +48,5 @@ feature records without treating them as the next task. The requested work cover
 NestJS module/domain boundaries, thin controllers, cohesive services, Prettier
 with Husky/lint-staged, CI checks and safe domain logging through existing
 observability. Live collector and deployment smoke checks remain external-owner work.
+
+Current deployment policy: [deployment-workflows](docs/deployment-workflows.md). Automatic main delivery verifies/deploys; npm publication is manual only. This supersedes older automatic-publishing instructions.

@@ -136,3 +136,5 @@ the external `ngx-net` network. The GitHub workflow deploys the service on
 pushes to `main`. It also supports a gateway-verified manual dispatch for
 coordinated deployments. It contains seed-specific targets and database
 constraints; review those when adopting the seed.
+
+Generated deployment orchestration is centrally managed by the Node CLI; see [deployment-workflows](deployment-workflows.md).

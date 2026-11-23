@@ -39,3 +39,5 @@ the largest folder number is not automatically the active feature.
 - [009-service-observability](009-service-observability/spec.md): Implemented and locally verified; Grafana ingestion authorization pending.
 
 - [010-code-maintenance](010-code-maintenance/spec.md): Implemented and locally verified; live integration pending.
+
+- [011-deployment-management](011-deployment-management/spec.md): Implemented locally; automatic verification/deployment, manual publication.

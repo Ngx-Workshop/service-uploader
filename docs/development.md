@@ -225,3 +225,5 @@ See [deployment cleanup](deployment-cleanup.md) for success-only image/container
 ## Service observability
 
 See [logging and heartbeat](observability.md) for operational endpoint semantics, JSON logging, collector ownership and actual validation.
+
+Deployment and npm publication now follow [deployment-workflows](deployment-workflows.md).
